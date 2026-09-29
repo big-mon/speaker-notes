@@ -1,0 +1,37 @@
+{
+  "repo": "FluidInference/silero-vad-coreml",
+  "revision": "b419383c55c110e2c9271fa6ee0ea83d03c70d96",
+  "license": "MIT",
+  "model": "Silero VAD v6.0.0 unified 32ms Core ML",
+  "purpose": "チャンク切点用の連続VAD / short pauses",
+  "total_bytes": 911498,
+  "note": "Separate artifact from existing v6.2.1 noisy-OR 256ms; version and aggregation both differ",
+  "files": [
+    {
+      "path": "silero-vad-unified-v6.0.0.mlmodelc/analytics/coremldata.bin",
+      "bytes": 243,
+      "sha256": "2141be60ea0adf7acb1232fbcfaffb2be308ae02e6672d3762aedf36611ea9fd"
+    },
+    {
+      "path": "silero-vad-unified-v6.0.0.mlmodelc/coremldata.bin",
+      "bytes": 593,
+      "sha256": "f460dcdf796b19c04bc38ab6e69601831f634e5e74d499487f0c8fe17ca12f0f"
+    },
+    {
+      "path": "silero-vad-unified-v6.0.0.mlmodelc/metadata.json",
+      "bytes": 3232,
+      "sha256": "282b1b788b5d4d66d6a70d468464a7ada71d2469a8705526b741fd9ab841295a"
+    },
+    {
+      "path": "silero-vad-unified-v6.0.0.mlmodelc/model.mil",
+      "bytes": 25126,
+      "sha256": "79eea23c368f3e7edf85af798a953f5b0910e4b08ff48e55fff8545dd05fd047"
+    },
+    {
+      "path": "silero-vad-unified-v6.0.0.mlmodelc/weights/weight.bin",
+      "bytes": 882304,
+      "sha256": "853cf34740d3f5061f977ebe2976f7c921b064261c9c4753b3a1196f2dba42b4"
+    }
+  ],
+  "directory": "models/silero-vad32"
+}

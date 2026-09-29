@@ -1,0 +1,65 @@
+{
+  "repo": "mlx-community/Qwen3-ForcedAligner-0.6B-bf16",
+  "revision": "53c8c0e46733eec430e4b53dd6471d0e5dee45f8",
+  "license": "Apache-2.0",
+  "purpose": "Qwen原文の音声時刻候補 / forced alignment",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 1519,
+      "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1068,
+      "sha256": "a6e90f1df31c4acfa7325c3725d7b2e45feb6df9c0b822ed444034f55007e6c2"
+    },
+    {
+      "path": "chat_template.json",
+      "bytes": 1161,
+      "sha256": "75a8cfca24f00de72d796fbfed6858fc9614ef3dabd8696684cc3bc03a9c58ff"
+    },
+    {
+      "path": "config.json",
+      "bytes": 6735,
+      "sha256": "dffdf2e17fa13effca4b165540c8eeea6d3f3211dcdb6c21978e68578460858d"
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 115,
+      "sha256": "948d089b23bca1d214e768d59c4438365665f52ec6d33678f4062206b3fbbb8c"
+    },
+    {
+      "path": "merges.txt",
+      "bytes": 1671853,
+      "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 1835539240,
+      "sha256": "9d0728e17e28ee122c366bfaa9748ccbbb8fc3df4c0ce09dd8a5eac8202989e8"
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "bytes": 51430,
+      "sha256": "1c4a2d1a86f216ac10c8eb15f9a5aef80a89b3526f3589d47482eb035ec0eeae"
+    },
+    {
+      "path": "preprocessor_config.json",
+      "bytes": 330,
+      "sha256": "45e120a4eda2c20c5d7f2ea9354e63536bf35e27aa573fb7cdf78017b378770d"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 12666,
+      "sha256": "3ab80063f8511deb9566e6ad438d17b7a6277fcffd52d92854112f19d36bd81c"
+    },
+    {
+      "path": "vocab.json",
+      "bytes": 2776833,
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    }
+  ],
+  "directory": "models/qwen-aligner",
+  "total_bytes": 1840062950
+}
