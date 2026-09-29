@@ -83,6 +83,7 @@ class SourceMaterialTests(unittest.TestCase):
             full = json.loads((path / 'transcript.json').read_text())
             rows = [json.loads(line) for line in (path / 'segments.jsonl').read_text().splitlines()]
             differences = [json.loads(line) for line in (path / 'asr-differences.jsonl').read_text().splitlines()]
+            self.assertFalse((path / 'review.html').exists())
             self.assertEqual(len(rows), 2, 'Embedded newlines must not split JSONL records')
             self.assertEqual([r['text'] for r in rows], [r['text'] for r in full['segments']])
             self.assertNotIn('原則できません', (path / 'segments.jsonl').read_text())

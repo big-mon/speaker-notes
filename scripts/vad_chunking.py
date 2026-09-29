@@ -1,7 +1,7 @@
 """VAD-pause-first ASR partitioning without trimming or acoustic truth claims.
 
 This is a recorded local proposal, not an upstream model default. VAD low-score
-runs are candidate pauses only. When none is usable, the existing model-specific
+runs are candidate pauses only. When none is usable, the existing Qwen
 energy cut remains an explicitly unresolved fallback.
 """
 import array
@@ -68,25 +68,23 @@ def _pause_candidates(vad, samples, rate):
     return candidates, edges, frame_width
 
 
-def partition_at_vad_pauses(pcm, vad, engine, rate=16000, max_seconds=None):
+def partition_at_vad_pauses(pcm, vad, rate=16000, max_seconds=None):
     """Return ``parts`` / ``policy`` compatible with ``partition_for_asr``.
 
-    Defaults are Qwen 180 s and Cohere 30 s. Prefer the latest candidate midpoint
+    The default maximum is 180 s for Qwen. Prefer the latest candidate midpoint
     in [half maximum, maximum] relative to the current start. If unavailable,
     consider earlier midpoints after min(5 s, maximum/4). A remainder fitting the
     maximum is kept whole. Every PCM sample is retained exactly once.
     """
-    if engine not in ('qwen', 'cohere'):
-        raise ValueError('engine must be qwen or cohere')
     if type(rate) is not int or rate <= 0:
         raise ValueError('rate must be a positive integer')
     if not isinstance(pcm, (bytes, bytearray)) or not pcm or len(pcm) % 4:
         raise ValueError('Expected nonempty little-endian float32 mono PCM bytes')
-    default = 180. if engine == 'qwen' else 30.
+    default = 180.
     requested = default if max_seconds is None else max_seconds
     # Reuse the energy fallback's supported rate / maximum validation and
     # parameter metadata, without unnecessarily partitioning the whole input.
-    energy_policy = partition_for_asr(pcm[:4], engine, rate, requested)['policy']
+    energy_policy = partition_for_asr(pcm[:4], rate, requested)['policy']
     maximum = energy_policy['maximum_samples']
     values = array.array('f')
     if values.itemsize != 4:
@@ -124,7 +122,7 @@ def partition_at_vad_pauses(pcm, vad, engine, rate=16000, max_seconds=None):
                 # remainder. The extra sample forces a cut rather than input_end;
                 # its first cut equals an energy run over the full remainder.
                 prefix = pcm[cursor * 4:(cursor + maximum + 1) * 4]
-                fallback = partition_for_asr(prefix, engine, rate, requested)['parts'][0]
+                fallback = partition_for_asr(prefix, rate, requested)['parts'][0]
                 end = cursor + fallback['end_sample']
                 details = {k: v for k, v in fallback.items()
                            if k not in ('index', 'start_sample', 'end_sample', 'start', 'end', 'samples', 'duration', 'boundary_kind')}
@@ -143,7 +141,7 @@ def partition_at_vad_pauses(pcm, vad, engine, rate=16000, max_seconds=None):
         cursor = end
     fallback_configuration = {k: v for k, v in energy_policy.items() if k != 'source_sample_count'}
     return {'parts': parts, 'policy': {
-        'version': 1, 'name': 'vad_pause_first_with_visible_energy_fallback', 'engine': engine,
+        'version': 1, 'name': 'vad_pause_first_with_visible_energy_fallback', 'engine': 'qwen',
         'sample_rate': rate, 'source_sample_count': samples, 'vad_frame_samples': frame_width,
         'default_maximum_seconds': default, 'maximum_override_seconds': max_seconds,
         'maximum_seconds': maximum / rate, 'maximum_samples': maximum,
@@ -161,7 +159,7 @@ def partition_at_vad_pauses(pcm, vad, engine, rate=16000, max_seconds=None):
         'probability_meaning': 'raw VAD model speech scores, not boundary correctness confidence',
         'unresolved_meaning': 'no qualifying VAD pause for this cut; false does not mean acoustic verification',
         'text_processing': 'none', 'time_granularity': 'source input extents; not speech or word alignment',
-        'local_adaptation': 'recorded pause thresholds and Qwen180/Cohere30 caps; not an upstream universal best practice',
+        'local_adaptation': 'recorded pause thresholds and Qwen 180 s cap; not an upstream universal best practice',
     }}
 
 
@@ -177,7 +175,6 @@ def main(argv=None):
     parser.add_argument('audio', type=Path)
     parser.add_argument('vad', type=Path)
     parser.add_argument('output', type=Path)
-    parser.add_argument('--engine', choices=('qwen', 'cohere'), required=True)
     parser.add_argument('--max-seconds', type=float)
     args = parser.parse_args(argv)
     audio, vad_path, output = args.audio.resolve(), args.vad.resolve(), args.output.resolve()
@@ -189,7 +186,7 @@ def main(argv=None):
             record.get('sha256') != source['sha256']):
         raise ValueError('VAD file path and whole-WAV SHA-256 must match the input audio exactly')
     rate, data = read_float_wav(audio)
-    plan = partition_at_vad_pauses(data, record, args.engine, rate, args.max_seconds)
+    plan = partition_at_vad_pauses(data, record, rate, args.max_seconds)
     plan.update(source=source, vad=fingerprint(vad_path),
                 validation={'source_audio_identity_verified': True, 'sample_exact_contiguous_coverage': True,
                             'no_asr_inference': True, 'no_human_accuracy_verification': True})

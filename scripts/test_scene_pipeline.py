@@ -12,7 +12,7 @@ import time
 import unittest
 from unittest import mock
 
-from scene_pipeline import (clip_samples, fingerprint, partition_pcm,
+from scene_pipeline import (clip_samples, fingerprint,
                             read_float_wav, verify_manifest, write_float_wav)
 
 
@@ -141,22 +141,6 @@ class ScenePipelineTests(unittest.TestCase):
                 self.assertIn('--context-seconds must', process.stderr)
                 self.assertFalse(output.exists())
 
-    def test_partition_preserves_all_samples_including_silence(self):
-        source = pcm([.3] * 170 + [0.] * 7 + [.3] * 223)
-        parts = partition_pcm(source, rate=10, max_seconds=18, search_seconds=1)
-        self.assertEqual(parts[0]['boundary_kind'], 'minimum_200ms_energy_near_maximum')
-        self.assertTrue(170 <= parts[0]['end_sample'] <= 177)
-        self.assertEqual(b''.join(source[p['start_sample']*4:p['end_sample']*4] for p in parts), source)
-        self.assertTrue(all(p['end_sample']-p['start_sample'] <= 180 for p in parts))
-        self.assertEqual(parts[-1]['end_sample'], len(source)//4)
-        self.assertEqual(parts[-1]['boundary_kind'], 'input_end')
-
-    def test_partition_does_not_require_silence_or_drop_short_tail(self):
-        source = pcm([.3] * 361)
-        parts = partition_pcm(source, rate=10, max_seconds=18, search_seconds=1)
-        self.assertEqual(parts[-1]['end_sample'], 361)
-        self.assertTrue(all(p['end_sample'] > p['start_sample'] for p in parts))
-        self.assertEqual(sum(p['end_sample']-p['start_sample'] for p in parts), 361)
 
     def test_prepared_model_provenance_is_verified_not_downloaded(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -10,7 +10,6 @@
 | `scripts/aligned_speaker_turns.py`, `turn_candidates.py` | 話者交代と不明・混在・境界の保留 |
 | `scripts/review_aligned_scene.py`, `scene_transcript.py` | 結合と各形式への出力 |
 | `scripts/text_anchor_audit.py` | Apple/Qwen差分。正解参照ではない |
-| `scripts/merge.py`, `lexical_speaker_buckets.py` | 共通の時刻・結合ユーティリティと保守対象の回帰ロジック |
 | `scripts/cached_pipeline.py` | 全編の完了済み結果の検証・再利用 |
 | `scripts/validate_output.py` | 完成出力の構造検査 |
 | `scripts/apply_scene_review.py` | 人の確認票を照合し、原文と別に保存 |

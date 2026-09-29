@@ -4,12 +4,11 @@ Defaults to the full recording. --duration selects a preview with up to 15 secon
 Context is a preview heuristic, not a guarantee against cut speech or omissions.
 --context-seconds 0 reproduces the former crop; --full processes the whole file.
 No downloads, automatic text replacement, or claim of human-verified accuracy.
-The default qwen-aligned mode uses Qwen text and per-chunk local forced
+The pipeline uses Qwen text and per-chunk local forced
 alignment, with Apple as a comparison source. One diarization invocation covers
 the whole selected recording.
 """
 import argparse
-import array
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
@@ -130,57 +129,11 @@ def clip_samples(pcm, rate, start=0., duration=180., full=False, context_seconds
                               'context_conditions': conditions}
 
 
-def partition_pcm(pcm, rate=RATE, max_seconds=180., search_seconds=10.):
-    """Contiguous chunks with low 200ms energy near each maximum boundary.
-
-    Energy minima are only cut candidates, not verified silence or speech ends.
-    Every input sample belongs to exactly one chunk, with no overlap or deletion.
-    """
-    if not pcm or len(pcm) % 4 or rate <= 0:
-        raise ValueError('Invalid PCM input')
-    if not 0 < search_seconds < max_seconds:
-        raise ValueError('Expected 0 < search_seconds < max_seconds')
-    count, cursor, parts = len(pcm) // 4, 0, []
-    maximum, search = round(max_seconds * rate), round(search_seconds * rate)
-    step, radius = max(1, round(.01 * rate)), max(1, round(.1 * rate))
-    if maximum <= search or search < 1:
-        raise ValueError('Partition durations are too small')
-    while cursor < count:
-        end, energy = min(count, cursor + maximum), None
-        kind = 'input_end'
-        if end < count:
-            low, high = end - search, end
-            base, stop = max(0, low-radius), min(count, high+radius)
-            values = array.array('f', pcm[base*4:stop*4])
-            if sys.byteorder != 'little':
-                values.byteswap()
-            prefix = array.array('d', [0.])
-            for value in values:
-                if not math.isfinite(value):
-                    raise ValueError('Nonfinite PCM sample in boundary search')
-                prefix.append(prefix[-1] + value * value)
-            options = list(range(low, high + 1, step))
-            if options[-1] != high:
-                options.append(high)
-            def mean_square(at):
-                a, b = max(base, at-radius)-base, min(stop, at+radius)-base
-                return (prefix[b]-prefix[a]) / (b-a)
-            end = min(options, key=lambda at: (mean_square(at), -at))
-            energy, kind = mean_square(end), 'minimum_200ms_energy_near_maximum'
-        parts.append({'index': len(parts), 'start_sample': cursor, 'end_sample': end,
-                      'start': cursor/rate, 'end': end/rate,
-                      'boundary_kind': kind, 'boundary_mean_square': energy})
-        cursor = end
-    assert parts[0]['start_sample'] == 0 and parts[-1]['end_sample'] == count
-    assert all(a['end_sample'] == b['start_sample'] for a, b in zip(parts, parts[1:]))
-    return parts
-
-
-def verify_manifest(path, base, converted=False):
+def verify_manifest(path, base):
     """Verify prepared assets; never repair or download a missing model."""
     path, base = Path(path), Path(base).resolve()
     manifest = json.loads(path.read_text())
-    items = [manifest['converted']] if converted else manifest['files']
+    items = manifest['files']
     checked = []
     for item in items:
         asset = (base / item['path']).resolve()
@@ -223,7 +176,7 @@ def run_command(command, log):
 
 
 def run(args):
-    from scene_transcript import save, REVIEW_HTML
+    from scene_transcript import save
     started = time.perf_counter()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -233,10 +186,6 @@ def run(args):
                   'peak_memory_note': 'Pipeline peak RSS was not measured',
                   'measurement_scope': 'wall clock including provenance checks and initial artifact export; excludes final timing metadata write'}
     current_stage = 'initialization'
-    transcript_mode = getattr(args, 'transcript_mode', 'qwen-aligned')
-    chunk_mode = getattr(args, 'chunk_policy', 'vad')
-    if (transcript_mode, chunk_mode, args.diarizer) != ('qwen-aligned', 'vad', 'fluid'):
-        raise ValueError('Supported configuration: Qwen aligned + Silero VAD + Community-1')
 
     @contextmanager
     def stage(name):
@@ -265,40 +214,35 @@ def run(args):
                         'apple': ROOT/'.build/release/apple-transcribe',
                         'diarization': ROOT/'.build/release/fluid-diarize',
                         'qwen_python': ROOT/'.venv-asr/bin/python'}
-            if chunk_mode == 'vad':
-                binaries['vad'] = ROOT/'.build/release/silero-vad-frames'
+            binaries['vad'] = ROOT/'.build/release/silero-vad-frames'
             for binary in binaries.values():
                 if not binary.is_file() or not os.access(binary, os.X_OK):
                     raise FileNotFoundError(f'Prepared executable unavailable: {binary}')
             models = {'qwen': verify_manifest(ROOT/'config/models/qwen17-manifest.json', ROOT/'models/qwen17')}
-            if chunk_mode == 'vad':
-                models['vad'] = verify_manifest(ROOT/'config/models/silero-vad32-manifest.json', ROOT/'models/silero-vad32')
-            if transcript_mode == 'qwen-aligned':
-                models['alignment'] = verify_manifest(ROOT/'config/models/qwen-aligner-manifest.json', ROOT/'models/qwen-aligner')
+            models['vad'] = verify_manifest(ROOT/'config/models/silero-vad32-manifest.json', ROOT/'models/silero-vad32')
+            models['alignment'] = verify_manifest(ROOT/'config/models/qwen-aligner-manifest.json', ROOT/'models/qwen-aligner')
             models['diarization'] = verify_manifest(ROOT/'config/models/fluid-model-manifest.json', ROOT/'models/fluid/speaker-diarization-coreml')
             code = ['scripts/scene_pipeline.py', 'scripts/scene_transcript.py',
                     'scripts/text_anchor_audit.py', 'scripts/turn_candidates.py',
-                    'scripts/merge.py', 'scripts/qwen_asr.py', 'scripts/asr_chunking.py',
+                    'scripts/qwen_asr.py', 'scripts/asr_chunking.py',
                     'Sources/Normalize/main.swift', 'Sources/AppleTranscribe/main.swift',
                     'Sources/FluidDiarize/main.swift']
-            if chunk_mode == 'vad':
-                code += ['scripts/vad_chunking.py', 'Sources/SileroVADFrames/main.swift']
-            if transcript_mode == 'qwen-aligned':
-                code += ['scripts/align_qwen.py', 'scripts/compose_alignment.py',
-                         'scripts/aligned_speaker_turns.py', 'scripts/review_aligned_scene.py']
+            code += ['scripts/vad_chunking.py', 'Sources/SileroVADFrames/main.swift']
+            code += ['scripts/align_qwen.py', 'scripts/compose_alignment.py',
+                     'scripts/aligned_speaker_turns.py', 'scripts/review_aligned_scene.py']
             provenance = {'input': fingerprint(args.input),
                           'environment': {'macOS': platform.mac_ver()[0], 'machine': platform.machine(),
                                           'pipeline_python': sys.version, 'executable': sys.executable},
                           'binaries': {k: fingerprint(v) for k, v in binaries.items()},
                           'code': {p: fingerprint(ROOT/p) for p in code}, 'models': models,
                           'configured_versions': json.loads((ROOT/'config/runtime.json').read_text()),
-                          'settings': {'diarizer': args.diarizer, 'passes': 1, 'transcript_mode': transcript_mode,
+                          'settings': {'diarizer': 'fluid', 'passes': 1, 'transcript_mode': 'qwen-aligned',
                                        'apple_locale': 'ja-JP', 'normalization': 'AVAudioConverter maximum quality; 16kHz mono float32; no trimming',
                                        'requested_start': args.start, 'requested_duration': None if args.full else args.duration,
                                        'requested_context_seconds': args.context_seconds,
                                        'full_recording_requested': args.full, 'qwen_max_input_seconds': 180,
                                        'qwen_hotwords': False,
-                                       'qwen_chunk_policy': chunk_mode}}
+                                       'qwen_chunk_policy': 'vad'}}
             write_json(output/'provenance.json', provenance)
         with stage('normalization') as row:
             command = [binaries['normalize'], args.input.resolve(), output/'normalized.wav']
@@ -316,12 +260,11 @@ def run(args):
             source_duration = len(full_pcm)/4/rate
             del full_pcm
             write_float_wav(output/'audio.wav', pcm)
-        if chunk_mode == 'vad':
-            with stage('vad_pause_detection') as row:
-                command = [binaries['vad'], output/'audio.wav',
-                           ROOT/'models/silero-vad32/silero-vad-unified-v6.0.0.mlmodelc', output/'vad']
-                row['command'] = [str(x) for x in command]
-                run_command(command, output/'logs/vad.log')
+        with stage('vad_pause_detection') as row:
+            command = [binaries['vad'], output/'audio.wav',
+                       ROOT/'models/silero-vad32/silero-vad-unified-v6.0.0.mlmodelc', output/'vad']
+            row['command'] = [str(x) for x in command]
+            run_command(command, output/'logs/vad.log')
         with stage('qwen_partition'):
             from vad_chunking import partition_at_vad_pauses
             vad_path = output/'vad/frames.json'
@@ -330,7 +273,7 @@ def run(args):
             if (Path(vad['file']).resolve() != Path(audio_identity['path']) or
                     vad['sha256'] != audio_identity['sha256']):
                 raise ValueError('VAD frames do not correspond to the selected audio')
-            plan = partition_at_vad_pauses(pcm, vad, 'qwen', rate)
+            plan = partition_at_vad_pauses(pcm, vad, rate)
             parts, chunk_policy = plan['parts'], plan['policy']
             chunk_policy['raw_vad'] = fingerprint(vad_path)
             write_json(output/'vad-chunk-plan.json', plan)
@@ -382,40 +325,38 @@ def run(args):
             if comparison['incomplete']:
                 raise RuntimeError('Qwen token_limit_reached: output is incomplete; raw results retained, no completed review artifact produced')
 
-        alignment = None
-        if transcript_mode == 'qwen-aligned':
-            from compose_alignment import compose_alignments
-            with stage('forced_alignment') as row:
-                (output/'alignment-input').mkdir()
-                (output/'alignments').mkdir()
-                row.update(total_chunks=len(chunks), completed_chunks=0, commands=[])
-                aligned_parts = []
-                for chunk in chunks:
-                    index = chunk['index']
-                    text_path = output/'alignment-input'/f'{index:03d}.txt'
-                    text_path.write_text(chunk['text'], encoding='utf-8')
-                    part_output = output/'alignments'/f'{index:03d}'
-                    command = [binaries['qwen_python'], ROOT/'scripts/align_qwen.py',
-                               '--model', ROOT/'models/qwen-aligner', '--audio', chunk['file']['path'],
-                               '--text', text_path, '--source-offset', str(chunk['source_start']),
-                               '--output', part_output]
-                    row['commands'].append([str(x) for x in command])
-                    run_command(command, output/'logs'/f'alignment-{index:03d}.log')
-                    aligned = json.loads((part_output/'alignment.json').read_text())
-                    align_manifest = json.loads((part_output/'manifest.json').read_text())
-                    if (align_manifest['status'] != 'completed' or
-                            aligned['mapping']['original_text'] != chunk['text'] or
-                            align_manifest['inputs']['audio']['sha256'] != chunk['file']['sha256']):
-                        raise ValueError('Alignment does not match its ASR text and exact input audio')
-                    aligned_parts.append({'start': chunk['start'], 'end': chunk['end'], 'alignment': aligned,
-                                          'source': fingerprint(part_output/'alignment.json')})
-                    row['completed_chunks'] += 1
-                    write_json(output/'processing.json', processing)
-                    print(f'alignment_chunk {row["completed_chunks"]}/{len(chunks)}', flush=True)
-                alignment = compose_alignments(aligned_parts, window['source_offset'], window['duration'])
-                if alignment['mapping']['original_text'] != qwen_text:
-                    raise ValueError('Composed alignment changed the Qwen chunk text')
-                write_json(output/'alignment.json', alignment)
+        from compose_alignment import compose_alignments
+        with stage('forced_alignment') as row:
+            (output/'alignment-input').mkdir()
+            (output/'alignments').mkdir()
+            row.update(total_chunks=len(chunks), completed_chunks=0, commands=[])
+            aligned_parts = []
+            for chunk in chunks:
+                index = chunk['index']
+                text_path = output/'alignment-input'/f'{index:03d}.txt'
+                text_path.write_text(chunk['text'], encoding='utf-8')
+                part_output = output/'alignments'/f'{index:03d}'
+                command = [binaries['qwen_python'], ROOT/'scripts/align_qwen.py',
+                           '--model', ROOT/'models/qwen-aligner', '--audio', chunk['file']['path'],
+                           '--text', text_path, '--source-offset', str(chunk['source_start']),
+                           '--output', part_output]
+                row['commands'].append([str(x) for x in command])
+                run_command(command, output/'logs'/f'alignment-{index:03d}.log')
+                aligned = json.loads((part_output/'alignment.json').read_text())
+                align_manifest = json.loads((part_output/'manifest.json').read_text())
+                if (align_manifest['status'] != 'completed' or
+                        aligned['mapping']['original_text'] != chunk['text'] or
+                        align_manifest['inputs']['audio']['sha256'] != chunk['file']['sha256']):
+                    raise ValueError('Alignment does not match its ASR text and exact input audio')
+                aligned_parts.append({'start': chunk['start'], 'end': chunk['end'], 'alignment': aligned,
+                                      'source': fingerprint(part_output/'alignment.json')})
+                row['completed_chunks'] += 1
+                write_json(output/'processing.json', processing)
+                print(f'alignment_chunk {row["completed_chunks"]}/{len(chunks)}', flush=True)
+            alignment = compose_alignments(aligned_parts, window['source_offset'], window['duration'])
+            if alignment['mapping']['original_text'] != qwen_text:
+                raise ValueError('Composed alignment changed the Qwen chunk text')
+            write_json(output/'alignment.json', alignment)
 
         with stage('assembly'):
             apple_path, diar_path = output/'apple/transcript-segments.json', output/'diarization/pass-1.json'
@@ -443,13 +384,11 @@ def run(args):
         write_json(output/'processing.json', processing)
         # Only update timing metadata in files created by this invocation.
         write_json(output/'result/transcript.json', document)
-        (output/'result/review.html').write_text(REVIEW_HTML.replace('__DATA__', json.dumps(document, ensure_ascii=False).replace('<', '\\u003c')))
         print(json.dumps({'status': 'processing_complete_quality_unverified',
                           'outputs': {kind: str((output/'result'/f'transcript.{kind}').resolve())
                                       for kind in ('txt', 'md', 'json')} |
                                      {name: str((output/'result'/name).resolve()) for name in
                                       ('source-material.json', 'segments.jsonl', 'asr-differences.jsonl', 'README.md')},
-                          'review': str(output/'result/review.html'),
                           'total_seconds': processing['total_seconds']}, ensure_ascii=False), flush=True)
     except BaseException as error:
         processing.update(status='cancelled' if isinstance(error, KeyboardInterrupt) else 'failed',
@@ -471,11 +410,6 @@ def main(argv=None):
     extent.add_argument('--full', action='store_true', help='process the whole file; context is not applied')
     parser.add_argument('--context-seconds', type=float, default=15,
                         help='preview context on each side, 0–15 seconds (default: 15); 0 reproduces old cropping; heuristic only')
-    parser.add_argument('--diarizer', choices=['fluid'], default='fluid', help='Community-1; one invocation over the selected recording')
-    parser.add_argument('--chunk-policy', choices=['vad'], default='vad',
-                        help='Silero short-pause candidates, with an explicitly flagged fallback; 180s maximum')
-    parser.add_argument('--transcript-mode', choices=['qwen-aligned'], default='qwen-aligned',
-                        help='Qwen text with local alignment and Apple comparison')
     args = parser.parse_args(argv)
     if args.duration is None:
         args.full = True

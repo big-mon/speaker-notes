@@ -1,7 +1,6 @@
 import Foundation
 import AVFoundation
 import Speech
-import CryptoKit
 
 struct Segment: Codable, Sendable {
     let start: Double
@@ -97,30 +96,8 @@ struct Transcribe {
 
     static func run() async throws {
         let arguments = Array(CommandLine.arguments.dropFirst())
-        guard arguments.count == 2 || (arguments.count == 4 && arguments[2] == "--context-file") else {
-            throw NSError(domain: "Transcribe", code: 1, userInfo: [NSLocalizedDescriptionKey: "Usage: apple-transcribe input-audio output-directory [--context-file terms.json] | --check-model | --prepare-model"])
-        }
-        var contextMetadata: [String: Any]?
-        var contextualStrings: [String]?
-        if arguments.count == 4 {
-            let contextURL = URL(fileURLWithPath: arguments[3]).standardizedFileURL
-            let data = try Data(contentsOf: contextURL)
-            let terms = try JSONDecoder().decode([String].self, from: data)
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            guard terms.count <= 100, terms.allSatisfy({ !$0.isEmpty }) else {
-                throw NSError(domain: "Transcribe", code: 6, userInfo: [NSLocalizedDescriptionKey: "Context must contain at most 100 nonempty strings"])
-            }
-            contextualStrings = terms
-            contextMetadata = [
-                "file": contextURL.path,
-                "file_sha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
-                "terms": terms,
-                "api": "AnalysisContext.contextualStrings[.general] / SpeechAnalyzer.setContext",
-                "set_context_completed": false,
-                "recognition_bias_verified": false,
-                "note": "Official contextualStrings accuracy discussion names DictationTranscriber; setter completion does not establish an effect on SpeechTranscriber. No text substitution is performed.",
-                "documentation": "https://developer.apple.com/documentation/speech/analysiscontext/contextualstrings"
-            ]
+        guard arguments.count == 2 else {
+            throw NSError(domain: "Transcribe", code: 1, userInfo: [NSLocalizedDescriptionKey: "Usage: apple-transcribe input-audio output-directory | --check-model | --prepare-model"])
         }
         guard SpeechTranscriber.isAvailable,
               let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "ja-JP")) else {
@@ -141,24 +118,6 @@ struct Transcribe {
         print("Input: \(source.lastPathComponent), duration=\(duration), locale=\(locale.identifier)")
         fflush(stdout)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
-        if let terms = contextualStrings {
-            let metadataURL = output.appendingPathComponent("context-metadata.json")
-            try JSONSerialization.data(withJSONObject: contextMetadata!, options: [.prettyPrinted, .sortedKeys])
-                .write(to: metadataURL, options: .atomic)
-            let context = AnalysisContext()
-            context.contextualStrings[.general] = terms
-            do {
-                try await analyzer.setContext(context)
-            } catch {
-                await analyzer.cancelAndFinishNow()
-                throw error
-            }
-            contextMetadata?["set_context_completed"] = true
-            try JSONSerialization.data(withJSONObject: contextMetadata!, options: [.prettyPrinted, .sortedKeys])
-                .write(to: metadataURL, options: .atomic)
-            print("Context: \(terms.count) terms submitted; recognition bias is unverified")
-            fflush(stdout)
-        }
         let collector = Task { () throws -> [Segment] in
             var segments: [Segment] = []
             for try await result in transcriber.results {

@@ -53,7 +53,6 @@ Apple silicon / macOS 26以降 / Swift 6.2以降 / Python 3.12以降が必要で
 | `transcript.md` / `.txt` | 人が通読する時刻付き本文 |
 | `transcript.json` | 原出力参照・アラインメント・全メタデータを含む詳細版 |
 | `README.md` | この素材の読み方と利用上の制約 |
-| `review.html` | 必要に応じたローカル聴取・修正用ページ |
 
 後段ではまず `source-material.json` と `segments.jsonl` を読み、質問・主張・理由・具体例を含むシーン候補を選びます。候補には `artifact_id`、区間ID、元音声の秒範囲を付けます。固有名詞・否定・数字・引用を確定する前に、差分と音声を確認してください。話者が不確かな候補は匿名で扱い、文章を推測で補いません。
 
@@ -66,6 +65,8 @@ python3 scripts/cached_pipeline.py "/path/to/podcast.mp3" --cache runs/cli-cache
 ```
 
 キャッシュは入力・モデル・実装・実行環境を識別し、完了結果を検証して再利用します。失敗工程からの途中再開は行いません。異なる条件・変更された結果には新しい試行を作ります。詳しい出力構造は[リポジトリ案内](docs/REPOSITORY_MAP.md)、人による確認は[確認手順](docs/REVIEW_WORKFLOW.md)。
+
+出力はテキストとJSONに限定し、確認用HTMLは生成しません。人の修正は確認票JSONで別保存できます。Qwen本文・Apple照合・Silero VAD・Community-1の固定構成なので、旧 `--transcript-mode`・`--chunk-policy`・`--diarizer`・キャッシュの `--engine` は不要です。使用設定の記録は引き続き出力に含めます。
 
 ## 処理と残る制限
 

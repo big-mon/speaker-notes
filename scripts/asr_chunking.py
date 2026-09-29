@@ -1,4 +1,4 @@
-"""Model-specific low-energy cuts, with exact source-sample coverage.
+"""Qwen low-energy cuts, with exact source-sample coverage.
 
 The returned intervals describe existing little-endian float32 mono PCM. This
 module neither rewrites audio nor handles text, VAD, ASR, or speaker identities.
@@ -9,20 +9,11 @@ import math
 import sys
 
 
-SOURCES = {
-    'qwen': {
-        'revision': '7c6daf77a2421100f5fb066495372c00129d39ff',
-        'url': 'https://github.com/QwenLM/Qwen3-ASR/blob/7c6daf77a2421100f5fb066495372c00129d39ff/qwen_asr/inference/utils.py',
-        'function': 'split_audio_into_chunks',
-        'license': 'Apache-2.0',
-    },
-    'cohere': {
-        'revision': '276f1402020831d949c2e1a80574a5603995de23',
-        'release': 'transformers v5.4.0',
-        'url': 'https://github.com/huggingface/transformers/blob/276f1402020831d949c2e1a80574a5603995de23/src/transformers/models/cohere_asr/feature_extraction_cohere_asr.py',
-        'function': '_split_audio_chunks_energy / _find_split_point_energy',
-        'license': 'Apache-2.0',
-    },
+SOURCE = {
+    'revision': '7c6daf77a2421100f5fb066495372c00129d39ff',
+    'url': 'https://github.com/QwenLM/Qwen3-ASR/blob/7c6daf77a2421100f5fb066495372c00129d39ff/qwen_asr/inference/utils.py',
+    'function': 'split_audio_into_chunks',
+    'license': 'Apache-2.0',
 }
 
 
@@ -47,47 +38,26 @@ def _qwen_cut(values, left, right, width, target):
     }
 
 
-def _cohere_cut(values, left, right, width):
-    """RMS windows on the upstream grid; cut at the lowest window's start."""
-    if right - left <= width:
-        return (left + right) // 2, {'boundary_kind': 'cohere_search_midpoint'}
-    best, best_energy = left, math.inf
-    # Upstream's stop is exclusive: omit the window starting at right - width.
-    for first in range(left, right - width, width):
-        energy = math.sqrt(math.fsum(value * value for value in values[first:first + width]) / width)
-        if energy < best_energy:
-            best, best_energy = first, energy
-    return best, {
-        'boundary_kind': 'cohere_minimum_rms_window_start',
-        'quiet_window_start_sample': best,
-        'quiet_window_end_sample': best + width,
-        'boundary_window_rms': best_energy,
-    }
+def partition_for_asr(pcm, rate=16000, max_seconds=None):
+    """Return policy and ordered disjoint sample intervals for Qwen.
 
-
-def partition_for_asr(pcm, engine, rate=16000, max_seconds=None):
-    """Return policy and ordered disjoint sample intervals for Qwen or Cohere.
-
-    Defaults: Qwen strict maximum 180 s, target 175 s, search 170–180 s;
-    Cohere strict maximum 35 s, search 30–35 s. A maximum override is recorded
-    for controlled comparisons. Every sample, including short tails and silence,
+    Default strict maximum 180 s, target 175 s, search 170–180 s.
+    A maximum override is recorded for controlled comparisons. Every sample, including short tails and silence,
     is retained once. Times are input extents, not predicted speech timestamps.
     """
-    if engine not in SOURCES:
-        raise ValueError('engine must be qwen or cohere')
     if type(rate) is not int or rate <= 0:
         raise ValueError('rate must be a positive integer')
     if not isinstance(pcm, (bytes, bytearray)) or not pcm or len(pcm) % 4:
         raise ValueError('Expected nonempty little-endian float32 mono PCM bytes')
-    default = 180. if engine == 'qwen' else 35.
+    default = 180.
     requested_maximum = default if max_seconds is None else max_seconds
     if (isinstance(requested_maximum, bool) or
             not isinstance(requested_maximum, (int, float)) or
             not math.isfinite(requested_maximum)):
         raise ValueError('max_seconds must be a finite number')
-    minimum = 10 if engine == 'qwen' else 5
+    minimum = 10
     if requested_maximum <= minimum:
-        raise ValueError(f'{engine} max_seconds must exceed its {minimum}-second search span')
+        raise ValueError(f'Qwen max_seconds must exceed its {minimum}-second search span')
     sample_limit = requested_maximum * rate
     if not math.isfinite(sample_limit):
         raise ValueError('max_seconds is too large at this sample rate')
@@ -104,27 +74,22 @@ def partition_for_asr(pcm, engine, rate=16000, max_seconds=None):
     if any(not math.isfinite(value) for value in values):
         raise ValueError('PCM contains a nonfinite sample')
 
-    width = max(4 if engine == 'qwen' else 1, int(.1 * rate))
-    target = maximum - search if engine == 'qwen' else maximum
+    width = max(4, int(.1 * rate))
+    target = maximum - search
     adaptations = [
         'Return source sample intervals; never concatenate nonadjacent audio or alter PCM.',
         'Reject nonfinite samples across the entire input, including outside boundary searches.',
         'Keep short tails at their actual length; no dropped samples or added zero padding.',
         'Use Python float64 energy arithmetic, not NumPy/PyTorch float32; near-tied cuts can differ.',
         'Convert requested strict maximum to whole samples by rounding down.',
+        'Use strict maximum 180 s by default for the local alignment route; official ordinary ASR target is 1200 s and forced-alignment target is 180 s.',
+        'Set search target to strict maximum minus 5 s, so target ±5 s stays inside the maximum.',
+        'If the remainder already fits the strict maximum, retain it as one final interval.',
     ]
-    if engine == 'qwen':
-        adaptations += [
-            'Use strict maximum 180 s by default for the local alignment route; official ordinary ASR target is 1200 s and forced-alignment target is 180 s.',
-            'Set search target to strict maximum minus 5 s, so target ±5 s stays inside the maximum.',
-            'If the remainder already fits the strict maximum, retain it as one final interval.',
-        ]
-    else:
-        adaptations.append('Scale the official 1600-sample energy window (100 ms at 16 kHz) with sample rate for tests.')
     if max_seconds is not None:
         adaptations.append('Explicit maximum override for a controlled comparison; not a newly recommended model limit.')
     policy = {
-        'version': 1, 'engine': engine, 'source': dict(SOURCES[engine]),
+        'version': 1, 'engine': 'qwen', 'source': dict(SOURCE),
         'local_adaptations': adaptations,
         'sample_rate': rate, 'source_sample_count': len(values),
         'default_maximum_seconds': default,
@@ -132,10 +97,10 @@ def partition_for_asr(pcm, engine, rate=16000, max_seconds=None):
         'maximum_seconds': maximum / rate, 'maximum_samples': maximum,
         'target_seconds': target / rate,
         'search_before_target_seconds': 5.,
-        'search_after_target_seconds': 5. if engine == 'qwen' else 0.,
+        'search_after_target_seconds': 5.,
         'energy_window_requested_seconds': .1,
         'energy_window_samples': width, 'energy_window_seconds': width / rate,
-        'window_step_samples': 1 if engine == 'qwen' else width,
+        'window_step_samples': 1,
         'tie_break': 'first minimum window, then first minimum sample for Qwen',
         'coverage': 'all source samples exactly once; contiguous, no overlap, gaps or padding',
         'vad_used_for_cuts': False, 'verified_speech_end': False,
@@ -148,10 +113,7 @@ def partition_for_asr(pcm, engine, rate=16000, max_seconds=None):
             end, details = len(values), {'boundary_kind': 'input_end'}
         else:
             left, right = cursor + target - search, cursor + maximum
-            if engine == 'qwen':
-                end, details = _qwen_cut(values, left, right, width, cursor + target)
-            else:
-                end, details = _cohere_cut(values, left, right, width)
+            end, details = _qwen_cut(values, left, right, width, cursor + target)
             details.update(search_start_sample=left, search_end_sample=right,
                            target_sample=cursor + target)
         if not cursor < end <= min(len(values), cursor + maximum):

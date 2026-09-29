@@ -23,7 +23,7 @@ import uuid
 from scene_pipeline import fingerprint, verify_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPORT_FILES = ('transcript.json', 'transcript.txt', 'transcript.md', 'review.html',
+EXPORT_FILES = ('transcript.json', 'transcript.txt', 'transcript.md',
                 'source-material.json', 'segments.jsonl', 'asr-differences.jsonl', 'README.md')
 STAGES = {
     'provenance_and_preflight': 'モデルと入力の確認',
@@ -65,15 +65,12 @@ def make_cache_key(source, settings):
     return hashlib.sha256(canonical.encode('utf-8')).hexdigest(), identity
 
 
-def prepared_settings(engine):
-    if engine not in ('fluid',):
-        raise ValueError('話者識別方式が不明です')
+def prepared_settings():
     binaries = ['.build/release/normalize', '.build/release/apple-transcribe',
                 '.build/release/silero-vad-frames', '.venv-asr/bin/python',
                 '.build/release/fluid-diarize']
     scripts = ['cached_pipeline.py', 'scene_pipeline.py', 'scene_transcript.py',
-               'text_anchor_audit.py', 'turn_candidates.py', 'merge.py', 'qwen_asr.py',
-               'lexical_speaker_buckets.py',
+               'text_anchor_audit.py', 'turn_candidates.py', 'qwen_asr.py',
                'asr_chunking.py', 'vad_chunking.py', 'align_qwen.py',
                'compose_alignment.py', 'aligned_speaker_turns.py', 'review_aligned_scene.py']
     sources = ['Sources/Normalize/main.swift', 'Sources/AppleTranscribe/main.swift',
@@ -83,7 +80,7 @@ def prepared_settings(engine):
         'qwen17': (ROOT/'config/models/qwen17-manifest.json', ROOT/'models/qwen17'),
         'alignment': (ROOT/'config/models/qwen-aligner-manifest.json', ROOT/'models/qwen-aligner'),
         'vad': (ROOT/'config/models/silero-vad32-manifest.json', ROOT/'models/silero-vad32'),
-        'diarization': (ROOT/f'config/models/{engine}-model-manifest.json',
+        'diarization': (ROOT/'config/models/fluid-model-manifest.json',
                         ROOT/'models/fluid/speaker-diarization-coreml'),
     }
     for relative in binaries:
@@ -103,7 +100,7 @@ def prepared_settings(engine):
     return {
         'schema_version': 2, 'pipeline': 'scene-qwen-main-apple-comparison',
         'arguments': {'full': True, 'transcript_mode': 'qwen-aligned',
-                      'chunk_policy': 'vad', 'diarizer': engine, 'context_seconds': 15},
+                      'chunk_policy': 'vad', 'diarizer': 'fluid', 'context_seconds': 15},
         'environment': {'macOS': platform.mac_ver()[0], 'machine': platform.machine(),
                         'wrapper_python': sys.version, 'asr_packages': versions},
         'binaries': {p: fingerprint(ROOT/p) for p in binaries},
@@ -238,12 +235,12 @@ def stream_scene(command, log):
             process.stdout.close()
 
 
-def run(source, engine='fluid', cache=None):
+def run(source, cache=None):
     source = Path(source).resolve()
     if not source.is_file():
         raise FileNotFoundError(f'音声ファイルがありません: {source}')
     print('工程: 入力と処理設定を確認しています', flush=True)
-    settings = prepared_settings(engine)
+    settings = prepared_settings()
     key, source_identity = make_cache_key(source, settings)
     directory = (Path(cache) if cache is not None else ROOT/'runs/cli-cache').resolve()/key
     with job_lock(directory):
@@ -259,8 +256,7 @@ def run(source, engine='fluid', cache=None):
                   'attempt_path': str(attempt), 'stage_resume': False}
         write_json(attempt/'wrapper.json', record)
         command = [sys.executable, ROOT/'scripts/scene_pipeline.py', source, scene,
-                   '--full', '--transcript-mode', 'qwen-aligned', '--chunk-policy', 'vad',
-                   '--diarizer', engine]
+                   '--full']
         write_json(attempt/'command.json', list(map(str, command)))
         started = time.perf_counter()
         try:
@@ -294,13 +290,12 @@ def cancel(signum, frame):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input', type=Path)
-    parser.add_argument('--engine', choices=['fluid'], default='fluid')
     parser.add_argument('--cache', type=Path, default=ROOT/'runs/cli-cache')
     args = parser.parse_args()
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, cancel)
     try:
-        result = run(args.input, args.engine, args.cache)
+        result = run(args.input, args.cache)
         print('RESULT ' + str(result), flush=True)
         return 0
     except KeyboardInterrupt:

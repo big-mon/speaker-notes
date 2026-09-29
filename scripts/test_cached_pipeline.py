@@ -76,15 +76,15 @@ class CachedPipelineTests(unittest.TestCase):
             source.write_bytes(b'fixture audio')
             with mock.patch.object(app, 'ROOT', root), \
                     mock.patch.object(app.metadata, 'distributions', return_value=[]):
-                initial = app.prepared_settings('fluid')
+                initial = app.prepared_settings()
                 key = app.make_cache_key(source, initial)[0]
-                self.assertIn('scripts/lexical_speaker_buckets.py', initial['code'])
+                self.assertIn('scripts/aligned_speaker_turns.py', initial['code'])
                 self.assertIn('config/runtime.json', initial['code'])
                 runtime.write_text('{"changed": true}')
-                self.assertNotEqual(key, app.make_cache_key(source, app.prepared_settings('fluid'))[0])
+                self.assertNotEqual(key, app.make_cache_key(source, app.prepared_settings())[0])
                 (root/'models/qwen17/weights.bin').write_bytes(b'replaced fixture weights')
                 with self.assertRaisesRegex(ValueError, 'does not match recorded manifest'):
-                    app.prepared_settings('fluid')
+                    app.prepared_settings()
 
     def test_cache_identity_uses_resolved_path_content_and_complete_settings(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -176,7 +176,7 @@ class CachedPipelineTests(unittest.TestCase):
             directory = next(cache.iterdir())
             pointer = json.loads((directory/'completed.json').read_text())
             self.assertEqual(set(pointer['exports']), {
-                'transcript.json', 'transcript.txt', 'transcript.md', 'review.html',
+                'transcript.json', 'transcript.txt', 'transcript.md',
                 'source-material.json', 'segments.jsonl', 'asr-differences.jsonl', 'README.md'})
             for name in app.EXPORT_FILES:
                 with self.subTest(name=name):

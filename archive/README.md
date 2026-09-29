@@ -2,6 +2,8 @@
 
 2026-09-30のCLI整理前の資料を、ローカルの `archive/local-pre-cli/` に保持しています。このディレクトリはGit管理外です。公開クローンには含まれません。
 
+Ponytail監査後の削減前コードは `archive/local-pre-cli/ponytail-base-8fca52d/` に別保存しました。`snapshot.json` に元commit・相対パス・サイズ・SHA-256があります。旧Apple本文の結合・形態素バケット、Cohere分割、HTML確認画面、Apple文脈語実験と専用テストを含みます。Git上でもcommit `8fca52d` から参照できます。既存の実験・音声・出力は移動していません。
+
 | ローカル保管先 | 内容 |
 |---|---|
 | `research/README.md` | 過去の比較実験の索引 |
