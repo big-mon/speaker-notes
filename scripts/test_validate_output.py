@@ -82,6 +82,48 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
 
 
 class ValidateOutputTests(unittest.TestCase):
+    def test_entire_textless_run_keeps_audio_coverage_and_empty_exports(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            document = make_run(root)
+            manifest = json.loads((root/'audio-manifest.json').read_text())
+            part = manifest['qwen_chunks'][0]
+            part.update(end_sample=320, source_end=.03, boundary_kind='input_end')
+            audio = root/'qwen-input/000.wav'
+            audio.write_bytes((root/'audio.wav').read_bytes())
+            part['file'] = fingerprint(audio)
+            manifest['qwen_chunks'] = [part]
+            write_json(root/'audio-manifest.json', manifest)
+            raw = root/'qwen/000.json'
+            write_json(raw, {'file': str(audio), 'raw': {'text': ''}})
+            write_json(root/'qwen-comparison.json', {'incomplete': False, 'chunks': [dict(
+                part, text='', raw_output=fingerprint(raw), token_limit_reached=False)]})
+            (root/'qwen-comparison.txt').write_text('\n')
+            write_json(root/'alignment.json', {'mapping': {'original_text': ''},
+                       'source_offset_seconds': .01, 'duration_seconds': .02,
+                       'items': [], 'composition_parts': [{}]})
+            document['segments'] = []
+            for name, entry in document['raw_sources'].items():
+                document['raw_sources'][name] = fingerprint(entry['path'])
+            shutil.rmtree(root/'result')
+            save(document, root/'result')
+            report = validate(root)
+            self.assertEqual(report['status'], 'passed', report)
+            self.assertEqual(report['counts']['selected_samples'], 320)
+            self.assertEqual(report['counts']['text_characters'], 0)
+            self.assertEqual((root/'result/segments.jsonl').read_text(), '')
+
+    def test_nonempty_but_stale_readable_exports_are_rejected(self):
+        for name in ('transcript.txt', 'transcript.md', 'README.md'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                make_run(root)
+                (root/'result'/name).write_text('Nonempty stale text')
+                report = validate(root)
+                self.assertEqual(report['status'], 'failed')
+                self.assertEqual(report['errors'][0]['check'], 'compact_exports_and_readable_text')
+
     def test_two_chunk_nonzero_window_passes_without_quality_claim_or_writes(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -73,7 +73,9 @@ def map_tokens(text, words):
         reason = 'tokenizer_text_changed_or_unmatched'
         if block is not None:
             context = joined[block.b:block.b + block.size]
-            if exact or (lexical.count(context) == 1 and joined.count(context) == 1):
+            unique = all(value.find(context, value.find(context) + 1) == -1
+                         for value in (lexical, joined))
+            if exact or unique:
                 first = block.a + cursor - block.b
                 raw_indices = positions[first:first + len(word)]
                 reason = 'exact_characters_after_processor_filter'
@@ -268,11 +270,26 @@ def run(args):
             raise ValueError('Local model weights are missing; this script never downloads them')
         text_bytes = text_path.read_bytes()
         text = text_bytes.decode('utf-8')
-        if not text.strip():
-            raise ValueError('Transcript is empty')
         (output / 'text.txt').write_bytes(text_bytes)
         manifest['inputs'] = {'model': model_fingerprint(model_path),
                               'audio': fingerprint(audio_path), 'text': fingerprint(text_path)}
+        if not text.strip():
+            # No words to align is a successful, explicitly empty result, not
+            # evidence that the audio is silent. Preserve its complete extent.
+            from scene_pipeline import read_float_wav
+            rate, pcm = read_float_wav(audio_path)
+            if rate != 16000 or not pcm:
+                raise ValueError('Expected nonempty 16 kHz mono PCM')
+            write_json(output / 'alignment.json', {
+                'schema_version': 1, 'source_offset_seconds': args.source_offset,
+                'duration_seconds': len(pcm) / (4 * rate),
+                'mapping': map_tokens(text, []), 'items': [],
+                'alignment_status': 'no_text_to_align',
+                'audio_silence_verified': False,
+            })
+            manifest.update(status='completed', alignment_status='no_text_to_align',
+                            model_inference_performed=False)
+            return output
         manifest['runtime'] = {'python': sys.version, 'platform': platform.platform(), 'packages': {}}
         for name in ('mlx-audio', 'mlx', 'numpy', 'scipy', 'transformers', 'nagisa'):
             manifest['runtime']['packages'][name] = metadata.version(name)

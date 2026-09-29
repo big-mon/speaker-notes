@@ -32,6 +32,23 @@ def diar(*rows):
 
 
 class AlignedSpeakerTurnTests(unittest.TestCase):
+    def test_internal_time_regression_falls_back_and_keeps_raw_evidence(self):
+        a = alignment('一二三。', ['一', '二', '三'], [(0, 5), (20, 25), (10, 15)])
+        result = build_aligned_turns(a, diar((0, 30, 'speaker')))
+        row = result['segments'][0]
+        self.assertEqual((row['start'], row['end']), (0, 30))
+        self.assertEqual(row['time_kind'], 'source_clip_envelope_fallback')
+        self.assertEqual(row['speakers'], [])
+        self.assertEqual(result['raw_alignment'], a)
+
+    def test_asr_difference_links_use_half_open_spans_and_terminal_deletions(self):
+        from review_aligned_scene import difference_overlaps
+        rows = [(0, 4), (4, 8)]
+        for span, expected in [([0, 4], [True, False]), ([4, 8], [False, True]),
+                               ([4, 4], [False, True]), ([8, 8], [False, True]),
+                               ([0, 0], [True, False]), ([3, 5], [True, True])]:
+            self.assertEqual([difference_overlaps(span, a, b, 8) for a, b in rows], expected)
+
     def test_question_suffix_stays_before_new_speaker_start_snap(self):
         a = alignment('質問を任せみたいな。回答します。',
                       ['質問を', '任せ', 'みたいな', '回答します'],

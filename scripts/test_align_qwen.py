@@ -11,6 +11,37 @@ from align_qwen import annotate_timestamps, capture_parser, json_safe, map_token
 
 
 class MappingTests(unittest.TestCase):
+    def test_overlapping_partial_repetition_is_ambiguous(self):
+        for text, words in [('あああ', ['ああ']), ('ああ', ['あああ'])]:
+            mapped = map_tokens(text, words)
+            self.assertFalse(any(t['mapped'] for t in mapped['tokens']))
+        self.assertTrue(map_tokens('あああ', ['あ', 'ああ'])['coverage']['all_tokens_mapped'])
+
+    def test_textless_chunk_retains_extent_without_loading_model(self):
+        from scene_pipeline import write_float_wav
+        from compose_alignment import compose_alignments
+        from review_aligned_scene import make_document
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            model = root/'model'
+            model.mkdir()
+            (model/'config.json').write_text('{}')
+            (model/'fixture.safetensors').write_bytes(b'not real weights')
+            audio, text = root/'audio.wav', root/'text.txt'
+            write_float_wav(audio, b'\0' * 16000 * 4)
+            for index, content in enumerate(('', ' \n')):
+                text.write_text(content)
+                output = run(argparse.Namespace(model=model, audio=audio, text=text,
+                                                source_offset=30., output=root/str(index)))
+                child = json.loads((output/'alignment.json').read_text())
+                manifest = json.loads((output/'manifest.json').read_text())
+                self.assertFalse(manifest['model_inference_performed'])
+                self.assertEqual(child['mapping']['original_text'], content)
+                composite = compose_alignments([{'start': 0., 'end': 1., 'alignment': child}], 30., 1.)
+                document = make_document(composite, {'segments': []}, [], {}, {}, {})
+                self.assertEqual(''.join(r['text'] for r in document['segments']), content)
+                self.assertEqual(document['source_window'], {'start': 30., 'end': 31.})
+
     def test_exact_repeated_words_preserve_punctuation_whitespace_and_numbers(self):
         text = ' はい、はい。\r\n比率は-3.5%です。'
         words = ['はい', 'はい', '比率', 'は', '35', 'です']

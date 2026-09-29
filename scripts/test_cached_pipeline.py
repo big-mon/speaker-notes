@@ -17,20 +17,68 @@ import cached_pipeline as app
 
 def complete_scene(command, log):
     scene = Path(command[3])
-    (scene/'result').mkdir(parents=True)
-    app.write_json(scene/'processing.json', {'status': 'complete'})
-    app.write_json(scene/'result/transcript.json', {
-        'artifact_id': 'unit-test-fixture', 'processing': {'status': 'complete'},
-        'input': app.fingerprint(command[2]),
-        'segments': [{'text': 'これは未確認のテスト本文です。', 'speaker': None}],
-    })
-    for name in app.EXPORT_FILES:
-        if name != 'transcript.json':
-            (scene/'result'/name).write_text('test export: ' + name, encoding='utf-8')
+    from test_validate_output import make_run
+    from scene_transcript import save
+    import shutil
+    scene.mkdir(parents=True)
+    document = make_run(scene)
+    document['input'] = app.fingerprint(command[2])
+    document['provenance']['input'] = document['input']
+    document['processing'] = {'status': 'complete'}
+    app.write_json(scene/'provenance.json', document['provenance'])
+    shutil.rmtree(scene/'result')
+    save(document, scene/'result')
     Path(log).write_text('test fixture; no model invocation\n')
 
 
 class CachedPipelineTests(unittest.TestCase):
+    def test_raw_artifact_corruption_or_removal_cannot_hit_cache(self):
+        for relative in ('qwen/000.json', 'alignment.json', 'diarization/pass-1.json'):
+            for remove in (False, True):
+                with self.subTest(file=relative, remove=remove), tempfile.TemporaryDirectory() as folder:
+                    source, cache = Path(folder)/'input.wav', Path(folder)/'cache'
+                    source.write_bytes(b'audio')
+                    with mock.patch.object(app, 'prepared_settings', return_value={}), \
+                            mock.patch.object(app, 'stream_scene', side_effect=complete_scene) as execute, contextlib.redirect_stdout(io.StringIO()):
+                        first = app.run(source, cache)
+                        raw = first.parents[1]/relative
+                        raw.unlink() if remove else raw.write_text('corrupt')
+                        second = app.run(source, cache)
+                        self.assertNotEqual(first, second)
+                        self.assertEqual(execute.call_count, 2)
+
+    def test_source_change_between_key_and_processing_is_not_published(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, cache = Path(folder)/'input.wav', Path(folder)/'cache'
+            source.write_bytes(b'original')
+            def changed(command, log):
+                source.write_bytes(b'changed')
+                complete_scene(command, log)
+                source.write_bytes(b'original')
+            with mock.patch.object(app, 'prepared_settings', return_value={}), \
+                    mock.patch.object(app, 'stream_scene', side_effect=changed), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaisesRegex(RuntimeError, 'Input changed'):
+                    app.run(source, cache)
+            self.assertEqual(list(cache.glob('*/completed.json')), [])
+            with mock.patch.object(app, 'prepared_settings', return_value={}), \
+                    mock.patch.object(app, 'stream_scene', side_effect=complete_scene) as execute, contextlib.redirect_stdout(io.StringIO()):
+                app.run(source, cache)
+                self.assertEqual(execute.call_count, 1)
+
+    def test_dependency_identity_tracks_tokenizer_native_code_and_new_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            site = Path(folder)
+            for name in ('nagisa.py', 'dynet.so', 'transformers/tokenizer.py'):
+                path = site/name
+                path.parent.mkdir(exist_ok=True)
+                path.write_bytes(b'original same version')
+            previous = app.runtime_identity(site)
+            for name in ('nagisa.py', 'dynet.so', 'transformers/tokenizer.py', 'added.py'):
+                (site/name).write_bytes(b'patched same version')
+                current = app.runtime_identity(site)
+                self.assertNotEqual(previous, current)
+                previous = current
+
     def test_prepared_models_and_all_runtime_code_participate_in_identity(self):
         """Fixture assets stand in for weights; no real model or MLX is loaded."""
         with tempfile.TemporaryDirectory() as folder:
@@ -201,7 +249,7 @@ class CachedPipelineTests(unittest.TestCase):
                 (Path(command[3])/'result/segments.jsonl').unlink()
             with mock.patch.object(app, 'prepared_settings', return_value={'fixed': 'settings'}), \
                     mock.patch.object(app, 'stream_scene', side_effect=incomplete_exports), contextlib.redirect_stdout(io.StringIO()):
-                with self.assertRaises(FileNotFoundError):
+                with self.assertRaisesRegex(RuntimeError, 'structural validation'):
                     app.run(source, cache=cache)
             directory = next(cache.iterdir())
             self.assertFalse((directory/'completed.json').exists())

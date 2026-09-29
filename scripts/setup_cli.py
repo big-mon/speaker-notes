@@ -168,7 +168,8 @@ def verify_vendor(root=ROOT):
         raise ValueError('FluidAudio patch digest mismatch')
     changes = command(['git', '-C', directory, 'diff'], root, capture=True).stdout
     staged = command(['git', '-C', directory, 'diff', '--cached'], root, capture=True).stdout
-    if changes != patch.read_text() or staged:
+    untracked = command(['git', '-C', directory, 'ls-files', '--others', '--exclude-standard'], root, capture=True).stdout
+    if changes != patch.read_text() or staged or untracked:
         raise ValueError('FluidAudio changes differ from the recorded patch; preserved without reset')
     return {'revision': revision, 'patch_sha256': fluid['patch_sha256']}
 
@@ -202,10 +203,20 @@ def verify(root=ROOT):
             report['apple_speech'] = json.loads(result.stdout)
         except ValueError:
             report['apple_speech'] = {'status': 'check_failed', 'message': result.stderr.strip()}
-        if result.returncode:
+        status = report['apple_speech']
+        if (result.returncode or not isinstance(status, dict) or
+                status.get('status') != 'ready' or status.get('installed') is not True):
             report['errors'].append('Apple Japanese model is not ready; see apple_speech')
     report['ready'] = not report['errors']
     return report
+
+
+def prepare_interpreter(python, root=ROOT):
+    if python.exists() and os.environ.get('PYTHON'):
+        actual = command([python, '-c',
+                          'import sys; print(sys._base_executable)'], root, capture=True).stdout.strip()
+        if Path(actual).resolve() != Path(sys._base_executable).resolve():
+            command([sys.executable, '-m', 'venv', '--clear', root / '.venv-asr'], root)
 
 
 def install(root=ROOT, prepare_apple=False):
@@ -227,6 +238,7 @@ def install(root=ROOT, prepare_apple=False):
         command(['git', '-C', directory, 'apply', root / fluid['patch']], root)
     verify_vendor(root)
     python = root / '.venv-asr/bin/python'
+    prepare_interpreter(python, root)
     if not python.exists():
         command([sys.executable, '-m', 'venv', root / '.venv-asr'], root)
     try:

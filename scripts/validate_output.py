@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 
 from scene_pipeline import read_float_wav
-from scene_transcript import scene_artifact_id, source_material
+from scene_transcript import scene_artifact_id, source_material, readable_exports
 
 
 def read_json(path):
@@ -46,7 +46,7 @@ def quality_indicators(document, manifest):
     rate = manifest['sample_rate']
     chunk_durations = [(c['end_sample'] - c['start_sample']) / rate for c in chunks]
     longest_chunk = max(chunk_durations)
-    longest_row = max(r['end'] - r['start'] for r in rows)
+    longest_row = max((r['end'] - r['start'] for r in rows), default=0)
     window = document['source_window']
     fallback = [r['id'] for r in rows if 'broad_playback_timing_fallback' in r.get('flags', [])]
     whole_window = [r['id'] for r in rows if r['start'] == window['start'] and r['end'] == window['end']]
@@ -60,7 +60,7 @@ def quality_indicators(document, manifest):
         'speaker_state_counts': {state: sum(r['state'] == state for r in rows) for state in ('single', 'mixed', 'unknown')},
         'max_row_duration_seconds': longest_row,
         'max_row_duration_ids': [r['id'] for r in rows if r['end'] - r['start'] == longest_row],
-        'max_row_text_characters': max(len(r['text']) for r in rows),
+        'max_row_text_characters': max((len(r['text']) for r in rows), default=0),
         'broad_timing_fallback': {'count': len(fallback), 'row_ids': fallback},
         'whole_source_window_timing': {'count': len(whole_window), 'row_ids': whole_window},
         'rows_covering_multiple_chunks': {'count': len(multiple_chunks), 'row_ids': multiple_chunks},
@@ -188,7 +188,7 @@ def validate(run):
         require(alignment['source_offset_seconds'] == source_start and
                 alignment['duration_seconds'] == window['duration'], 'Alignment audio extent differs')
         rows = document['segments']
-        require(rows and ''.join(row['text'] for row in rows) == text, 'Transcript rows changed the Qwen text')
+        require(''.join(row['text'] for row in rows) == text, 'Transcript rows changed the Qwen text')
         cursor = 0
         for row in rows:
             span = row['source_raw_span']
@@ -219,8 +219,8 @@ def validate(run):
             require(actual == expected, f'Compact export differs from full transcript: {relative}')
         require(read_json(run / 'result/source-material.json') == metadata,
                 'Source material metadata differs from full transcript')
-        for name in ('transcript.txt', 'transcript.md', 'README.md'):
-            require((run / 'result' / name).read_text(encoding='utf-8').strip(), f'Empty readable export: {name}')
+        for name, expected in readable_exports(document).items():
+            require((run / 'result' / name).read_text(encoding='utf-8') == expected, f'Readable export differs from full transcript: {name}')
         report['checks'].append(check)
         indicators, warnings = quality_indicators(document, manifest)
         report['quality_indicators'] = indicators

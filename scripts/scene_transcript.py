@@ -132,19 +132,8 @@ SOURCE_MATERIAL_README = '''# 要約・価値あるシーン抽出の元資料
 '''
 
 
-def save(document, output):
-    output=Path(output)
-    if output.exists():
-        raise FileExistsError(output)
-    document['artifact_id'] = scene_artifact_id(document)
-    metadata, records, comparisons = source_material(document)
-    # Validate all JSON before creating a partial bundle. I/O failures still
-    # remain visible to the caller and are recorded by the pipeline.
-    json_files = {'transcript.json': document, 'source-material.json': metadata}
-    contents = {name: json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)+'\n'
-                for name, value in json_files.items()}
-    for name, values in (('segments.jsonl', records), ('asr-differences.jsonl', comparisons)):
-        contents[name] = ''.join(json.dumps(value, ensure_ascii=False, allow_nan=False)+'\n' for value in values)
+def readable_exports(document):
+    contents = {}
     entries=[]
     for row in document['segments']:
         label=' / '.join(document['speaker_names'][s] for s in row['speakers']) or '話者不明'
@@ -158,6 +147,23 @@ def save(document, output):
     source_note = document.get('text_source_note', 'Apple原文を保持し、Qwenの表現で置き換えていません。')
     contents['transcript.md'] = '# シーン抽出用の確認素材\n\n未校正。音声の意味・主要話者・境界は要確認。'+source_note+'\n\n'+text
     contents['README.md'] = SOURCE_MATERIAL_README
+    return contents
+
+
+def save(document, output):
+    output=Path(output)
+    if output.exists():
+        raise FileExistsError(output)
+    document['artifact_id'] = scene_artifact_id(document)
+    metadata, records, comparisons = source_material(document)
+    # Validate all JSON before creating a partial bundle. I/O failures still
+    # remain visible to the caller and are recorded by the pipeline.
+    json_files = {'transcript.json': document, 'source-material.json': metadata}
+    contents = {name: json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)+'\n'
+                for name, value in json_files.items()}
+    for name, values in (('segments.jsonl', records), ('asr-differences.jsonl', comparisons)):
+        contents[name] = ''.join(json.dumps(value, ensure_ascii=False, allow_nan=False)+'\n' for value in values)
+    contents.update(readable_exports(document))
     output.mkdir(parents=True,exist_ok=False)
     for name, content in contents.items():
         (output/name).write_text(content, encoding='utf-8')

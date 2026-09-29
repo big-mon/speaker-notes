@@ -44,6 +44,17 @@ def review_for(document):
 
 
 class ApplyReviewTests(unittest.TestCase):
+    def test_speaker_pass_preserves_production_overlap_and_mixed_state(self):
+        document = source()
+        row = document['segments'][0]
+        row['state'] = 'mixed'
+        row['raw_overlap_intervals'] = [{'start': 101., 'end': 102., 'speakers': ['one', 'two']}]
+        document['artifact_id'] = scene_artifact_id(document)
+        result, ready = apply_review(document, review_for(document))
+        self.assertEqual(result['segments'][0]['state'], 'mixed')
+        self.assertEqual(result['segments'][0]['raw_overlap_intervals'], row['raw_overlap_intervals'])
+        self.assertEqual(ready['segments'][0]['state'], 'mixed')
+
     def test_partial_review_never_approves_whole_transcript(self):
         document = source()
         before = copy.deepcopy(document)

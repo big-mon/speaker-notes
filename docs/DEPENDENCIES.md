@@ -10,7 +10,7 @@ scripts/setup.sh --install --prepare-apple
 scripts/setup.sh --verify
 ```
 
-`--install` は固定版の FluidAudio を取得し、`.venv-asr` に固定 Python 依存を準備し、下記 4 モデルと CLI の 4 実行物を用意します。GUI・Cohere・Parakeet・Nemotron は準備しません。既存の `.venv-asr` が固定版と一致すれば Python パッケージの再インストールはしません。新しい仮想環境の Python は `PYTHON=/path/to/python3.14 scripts/setup.sh --install` で選べます。Python依存は配布wheelのみを使い、対象Python版に対応するwheelがなければ停止します。未固定のビルド依存を自動取得してソースビルドには進みません。別Python版への切替では既存の仮想環境を保存してから準備し直します。
+`--install` は固定版の FluidAudio を取得し、`.venv-asr` に固定 Python 依存を準備し、下記 4 モデルと CLI の 4 実行物を用意します。GUI・Cohere・Parakeet・Nemotron は準備しません。既存の `.venv-asr` が固定版と一致すれば Python パッケージの再インストールはしません。新しい仮想環境の Python は `PYTHON=/path/to/python3.14 scripts/setup.sh --install` で選べます。Python依存は配布wheelのみを使い、対象Python版に対応するwheelがなければ停止します。未固定のビルド依存を自動取得してソースビルドには進みません。`PYTHON` を明示し、既存環境のベースPythonと異なる場合は `.venv-asr` をクリアして指定Pythonで再作成します。旧仮想環境は保管せず、固定依存を入れ直します。
 
 Apple の日本語モデル取得は `--prepare-apple` を明示した場合のみ行います。既に入っていれば再取得しません。Apple モデルが未準備の `--install` は、それ以外を準備した後の検証で終了コード 1 を返します。後から次のコマンドだけで Apple モデルを準備できます。
 
@@ -19,7 +19,7 @@ Apple の日本語モデル取得は `--prepare-apple` を明示した場合の�
 .build/release/apple-transcribe --prepare-model
 ```
 
-`--verify` はモデルファイル全体の SHA-256、Python パッケージ版、FluidAudio の commit とパッチ、CLI の存在、Apple 日本語モデルの準備状態を確認します。推論やモデル取得は行いません。実行物の存在確認は実際の音声処理の成功を保証しないため、準備後は README の短区間実行で確認します。macOS の Speech/Metal 機能がサンドボックス内で利用できない場合は、通常のターミナルか環境の承認手順を通した実行で確認してください。
+`--verify` はモデルファイル全体の SHA-256、Python パッケージ版、FluidAudio の commit・パッチ・未追跡ファイルの不在、CLI の存在、Apple 日本語モデルの準備状態を確認します。推論やモデル取得は行いません。実行物の存在確認は実際の音声処理の成功を保証しないため、準備後は README の短区間実行で確認します。macOS の Speech/Metal 機能がサンドボックス内で利用できない場合は、通常のターミナルか環境の承認手順を通した実行で確認してください。
 
 ## モデル
 

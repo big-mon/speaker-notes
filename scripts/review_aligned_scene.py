@@ -42,6 +42,15 @@ def build_review(alignment_dir, diarization_path, apple_path, qwen_path, origina
     return make_document(alignment, diarization, apple, fingerprint(original), sources, review_audio)
 
 
+def difference_overlaps(span, start, end, text_length):
+    left, right = span
+    if left == right:
+        # Apple-only text belongs to the following row; a terminal deletion
+        # belongs to the last row. Never link both sides of a boundary.
+        return start <= left < end or (left == text_length == end)
+    return left < end and right > start
+
+
 def make_document(alignment, diarization, apple, original_metadata, raw_sources, review_audio):
     """Render one global diarization with aligned Qwen text, including composites."""
     candidates = build_aligned_turns(alignment, diarization)
@@ -55,7 +64,7 @@ def make_document(alignment, diarization, apple, original_metadata, raw_sources,
     for raw in candidates['segments']:
         a, b = raw['source_raw_span']
         differences = [i for i, d in enumerate(comparison['differences'])
-                       if d['qwen_raw_span'][0] < b and d['qwen_raw_span'][1] >= a]
+                       if difference_overlaps(d['qwen_raw_span'], a, b, len(original_text))]
         speakers = [mapping[str(s)] for s in raw['speakers']]
         mixed = bool(raw['raw_overlap_intervals']) or 'other_speaker_activity_ownership_unresolved' in raw['flags']
         state = ('mixed' if mixed else 'single') if speakers else 'unknown'

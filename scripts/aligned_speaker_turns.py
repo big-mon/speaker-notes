@@ -64,8 +64,8 @@ def _eligible(item, duration):
 def _validate_alignment(alignment):
     text = alignment['mapping']['original_text']
     duration, offset = alignment['duration_seconds'], alignment['source_offset_seconds']
-    if not isinstance(text, str) or not text or not _finite(duration) or duration <= 0:
-        raise ValueError('Expected nonempty original text and finite positive clip duration')
+    if not isinstance(text, str) or not _finite(duration) or duration <= 0:
+        raise ValueError('Expected original text and finite positive clip duration')
     if not _finite(offset) or offset < 0:
         raise ValueError('Expected finite nonnegative source offset')
     items = alignment['items']
@@ -231,9 +231,14 @@ def build_aligned_turns(alignment, diarization, snap_seconds=2.0):
                   and region['start'] <= t['raw_clip_seconds'][0] < t['raw_clip_seconds'][1] <= region['end']]
         flags = ['not_human_verified', 'asr_text_accuracy_not_established']
         unmapped_lexical = any(text[i].isalnum() and i not in mapped_characters for i in range(a, b))
-        if not unmapped_lexical and usable and usable[0] is tokens[0] and usable[-1] is tokens[-1] and usable[0]['raw_clip_seconds'][0] < usable[-1]['raw_clip_seconds'][1]:
+        monotonic = all(left['raw_clip_seconds'][0] <= right['raw_clip_seconds'][0]
+                        and left['raw_clip_seconds'][1] <= right['raw_clip_seconds'][1]
+                        for left, right in zip(usable, usable[1:]))
+        safe_envelope = (len(usable) == len(tokens) and monotonic
+                         and not any('raw_nonmonotonic_sequence' in t.get('flags', []) for t in tokens))
+        if safe_envelope and not unmapped_lexical and usable:
             start, end = usable[0]['raw_clip_seconds'][0], usable[-1]['raw_clip_seconds'][1]
-            timing = 'first and last token raw times; internal anomalies retained in references'
+            timing = 'first and last token raw times; all token intervals fit a monotonic envelope'
             time_kind = 'forced_alignment_token_envelope'
         else:
             start, end = region['start'], region['end']
