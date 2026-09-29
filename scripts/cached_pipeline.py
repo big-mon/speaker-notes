@@ -81,7 +81,7 @@ def prepared_settings():
         'alignment': (ROOT/'config/models/qwen-aligner-manifest.json', ROOT/'models/qwen-aligner'),
         'vad': (ROOT/'config/models/silero-vad32-manifest.json', ROOT/'models/silero-vad32'),
         'diarization': (ROOT/'config/models/fluid-model-manifest.json',
-                        ROOT/'models/fluid/speaker-diarization-coreml'),
+                        ROOT/'models/fluid/speaker-diarization'),
     }
     for relative in binaries:
         path = ROOT/relative

@@ -67,6 +67,13 @@ def verify_file(path, entry):
         raise ValueError(f'Model asset differs; preserved without replacement: {path}')
 
 
+def verify_cache_revision(manifest, directory):
+    if manifest['repo'] == 'FluidInference/speaker-diarization-coreml':
+        marker = within(directory, '.fluidaudio-revision')
+        if marker.read_text().strip() != manifest['revision']:
+            raise ValueError(f'FluidAudio cache revision differs: {marker}')
+
+
 def fetch_model(manifest, root=ROOT, opener=urllib.request.urlopen):
     directory = within(root, manifest['directory'])
     for entry in manifest['files']:
@@ -93,6 +100,16 @@ def fetch_model(manifest, root=ROOT, opener=urllib.request.urlopen):
                 verify_file(destination, entry)
         finally:
             temporary.unlink(missing_ok=True)
+    if manifest['repo'] == 'FluidInference/speaker-diarization-coreml':
+        # FluidAudio requires this local marker even when all model bytes exist.
+        # Publish it only after every pinned asset has passed verification.
+        marker = within(directory, '.fluidaudio-revision')
+        try:
+            with marker.open('x') as stream:
+                stream.write(manifest['revision'] + '\n')
+        except FileExistsError:
+            pass
+        verify_cache_revision(manifest, directory)
 
 
 def command(arguments, root=ROOT, capture=False):
@@ -164,6 +181,7 @@ def verify(root=ROOT):
             directory = within(root, item['directory'])
             for entry in item['files']:
                 verify_file(within(directory, entry['path']), entry)
+            verify_cache_revision(item, directory)
             report['models'].append({'repo': item['repo'], 'status': 'verified',
                                      'bytes': item['total_bytes']})
         except (OSError, ValueError) as error:

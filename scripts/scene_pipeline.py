@@ -221,7 +221,7 @@ def run(args):
             models = {'qwen': verify_manifest(ROOT/'config/models/qwen17-manifest.json', ROOT/'models/qwen17')}
             models['vad'] = verify_manifest(ROOT/'config/models/silero-vad32-manifest.json', ROOT/'models/silero-vad32')
             models['alignment'] = verify_manifest(ROOT/'config/models/qwen-aligner-manifest.json', ROOT/'models/qwen-aligner')
-            models['diarization'] = verify_manifest(ROOT/'config/models/fluid-model-manifest.json', ROOT/'models/fluid/speaker-diarization-coreml')
+            models['diarization'] = verify_manifest(ROOT/'config/models/fluid-model-manifest.json', ROOT/'models/fluid/speaker-diarization')
             code = ['scripts/scene_pipeline.py', 'scripts/scene_transcript.py',
                     'scripts/text_anchor_audit.py', 'scripts/turn_candidates.py',
                     'scripts/qwen_asr.py', 'scripts/asr_chunking.py',

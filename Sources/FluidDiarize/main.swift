@@ -4,6 +4,7 @@ import FluidAudio
 
 @main struct CLI {
     static func main() async throws {
+        ModelHub.offlineMode = true
         let args = CommandLine.arguments
         guard args.count == 4 || args.count == 5 else { fatalError("fluid-diarize audio.wav model-directory output-directory") }
         let output = URL(fileURLWithPath: args[3])

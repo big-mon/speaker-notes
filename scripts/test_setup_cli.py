@@ -70,6 +70,42 @@ class SetupTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 setup_cli.within(root, 'escape/file')
 
+    def test_fluid_cache_is_prepared_from_verified_assets_without_runtime_downloads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = dict(self.manifest(), repo='FluidInference/speaker-diarization-coreml',
+                            directory='models/fluid/speaker-diarization')
+            setup_cli.fetch_model(manifest, root, lambda *a, **kw: io.BytesIO(b'model'))
+            directory = root / manifest['directory']
+            marker = directory / '.fluidaudio-revision'
+            self.assertEqual(marker.read_text().strip(), manifest['revision'])
+            setup_cli.verify_cache_revision(manifest, directory)
+            marker.unlink()
+            with self.assertRaises(FileNotFoundError):
+                setup_cli.verify_cache_revision(manifest, directory)
+            self.assertFalse(marker.exists(), 'Verification must not repair missing metadata')
+            opener = Mock(side_effect=AssertionError('Verified weights must not be fetched again'))
+            setup_cli.fetch_model(manifest, root, opener)
+            opener.assert_not_called()
+            setup_cli.verify_cache_revision(manifest, directory)
+
+    def test_fluid_marker_cannot_bless_bad_assets_or_overwrite_another_revision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = dict(self.manifest(), repo='FluidInference/speaker-diarization-coreml')
+            directory = root / manifest['directory']
+            marker = directory / '.fluidaudio-revision'
+            with self.assertRaises(ValueError):
+                setup_cli.fetch_model(manifest, root, lambda *a, **kw: io.BytesIO(b'wrong'))
+            self.assertFalse(marker.exists())
+            setup_cli.fetch_model(manifest, root, lambda *a, **kw: io.BytesIO(b'model'))
+            marker.write_text('b' * 40 + '\n')
+            opener = Mock(side_effect=AssertionError('No network'))
+            with self.assertRaisesRegex(ValueError, 'cache revision differs'):
+                setup_cli.fetch_model(manifest, root, opener)
+            opener.assert_not_called()
+            self.assertEqual(marker.read_text(), 'b' * 40 + '\n')
+
     def test_default_plan_has_only_supported_models_and_no_network(self):
         with patch('urllib.request.urlopen', side_effect=AssertionError('No network')):
             result = setup_cli.plan()
@@ -77,7 +113,7 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(len(result['models']), 4)
         self.assertEqual({item['directory'] for item in result['models']},
                          {'models/qwen17', 'models/qwen-aligner', 'models/silero-vad32',
-                          'models/fluid/speaker-diarization-coreml'})
+                          'models/fluid/speaker-diarization'})
 
 
 if __name__ == '__main__':

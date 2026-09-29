@@ -128,7 +128,7 @@
     }
   ],
   "purpose": "Community-1 offline diarization",
-  "directory": "models/fluid/speaker-diarization-coreml",
+  "directory": "models/fluid/speaker-diarization",
   "repo": "FluidInference/speaker-diarization-coreml",
   "license": "CC-BY-4.0",
   "model": "Community-1 Core ML offline pipeline",

@@ -65,7 +65,7 @@ class CachedPipelineTests(unittest.TestCase):
                 path.write_text('fixture runtime')
             for name, directory in [('qwen17', 'qwen17'), ('qwen-aligner', 'qwen-aligner'),
                                     ('silero-vad32', 'silero-vad32'),
-                                    ('fluid-model', 'fluid/speaker-diarization-coreml')]:
+                                    ('fluid-model', 'fluid/speaker-diarization')]:
                 asset = root/'models'/directory/'weights.bin'
                 asset.parent.mkdir(parents=True, exist_ok=True)
                 asset.write_bytes(b'original fixture weights')
