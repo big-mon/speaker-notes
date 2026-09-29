@@ -89,4 +89,4 @@ python3 -m unittest discover -s scripts -p 'test_*.py'
 
 テストはモデルを取得・実行しません。macOSの制限された環境では、キャンセル検査に必要なプロセス参照権限が必要です。Swift変更時は対象productをビルドしてください。
 
-現行実装は `scripts/` と4つの `Sources/`、固定条件は `config/`・`requirements/`・`patches/` にあります。過去のGUI・モデル比較・調査ログは[保管案内](archive/README.md)に分離しました。音声、モデル、実行結果、ローカルの過去資料はGitへ含めません。
+現行実装は `scripts/` と4つの `Sources/`、固定条件は `config/`・`requirements/`・`patches/` にあります。構成を選んだ背景は[設計判断](docs/DESIGN_DECISIONS.md)にまとめています。旧コードや調査の途中資料は残しません。音声、モデル、実行結果はGitへ含めません。

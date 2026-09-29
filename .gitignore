@@ -6,14 +6,11 @@ runs/
 .venv/
 .DS_Store
 
-dist/
-
 __pycache__/
 
 .venv-asr/
 
-# Local history and private/generated media never enter the public source repo.
-archive/local-pre-cli/
+# Private/generated media never enter the public source repo.
 *.wav
 *.mp3
 *.m4a
