@@ -140,9 +140,6 @@ struct Transcribe {
             _ = try await analyzer.analyzeSequence(from: audio)
             try await analyzer.finalizeAndFinishThroughEndOfInput()
             let segments = try await collector.value
-            guard !segments.isEmpty else {
-                throw NSError(domain: "Transcribe", code: 4, userInfo: [NSLocalizedDescriptionKey: "No speech results were produced"])
-            }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(segments).write(to: output.appendingPathComponent("transcript-segments.json"), options: .atomic)
@@ -162,11 +159,13 @@ struct Transcribe {
             - 処理時間: \(elapsed) 秒
             - 処理方式: Apple SpeechAnalyzer / SpeechTranscriber、端末内処理
             - 状態: 未校正の自動文字起こし。話者分離・要約は未実施。
+            - 認識区間数: \(segments.count)（0件は無音や認識成功の証明ではありません）
 
             \(timestamped)
             """
             try report.write(to: output.appendingPathComponent("transcript.md"), atomically: true, encoding: .utf8)
-            print("DONE: \(segments.count) segments, \(text.count) characters, elapsed=\(elapsed) seconds, last_segment_end=\(segments.last!.end)")
+            let lastEnd = segments.last.map { String($0.end) } ?? "none"
+            print("DONE: \(segments.count) segments, \(text.count) characters, elapsed=\(elapsed) seconds, last_segment_end=\(lastEnd)")
         } catch {
             await analyzer.cancelAndFinishNow()
             collector.cancel()

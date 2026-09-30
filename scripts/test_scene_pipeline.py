@@ -21,6 +21,20 @@ def pcm(values):
 
 
 class ScenePipelineTests(unittest.TestCase):
+    def test_common_audio_inputs_are_ignored_in_every_case(self):
+        root = Path(__file__).resolve().parents[1]
+        extensions = ('wav', 'wave', 'mp3', 'm4a', 'aac', 'aif', 'aiff', 'aifc', 'caf', 'flac',
+                      'alac', 'mp4', 'm4b', 'm4p', 'mov', '3gp', '3g2', 'au', 'snd',
+                      'ac3', 'eac3', 'amr', 'ogg', 'opus', 'wma')
+        paths = ['privacy-fixture/audio.'+variant for ext in extensions
+                 for variant in (ext, ext.upper(), ext.title())]
+        result = subprocess.run(['git', 'check-ignore', '--no-index', '--stdin'], cwd=root,
+                                input='\n'.join(paths)+'\n', text=True, capture_output=True, check=True)
+        self.assertEqual(set(result.stdout.splitlines()), set(paths))
+        result = subprocess.run(['git', 'check-ignore', '--no-index', '--stdin'], cwd=root,
+                                input='Sources/main.swift\nscripts/example.py\n', text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+
     def test_snapshot_binds_normalizer_to_verified_bytes_despite_restored_source(self):
         from scene_pipeline import verified_input_snapshot
         with tempfile.TemporaryDirectory() as directory:

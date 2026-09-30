@@ -32,6 +32,20 @@ def diar(*rows):
 
 
 class AlignedSpeakerTurnTests(unittest.TestCase):
+    def test_primary_and_secondary_empty_results_are_independent(self):
+        from review_aligned_scene import make_document
+        for primary in ('', '本文です。'):
+            for secondary in ([], [{'text': '比較文です。', 'units': [{'text': '比較文です。', 'start': 0., 'end': 5.}]}]):
+                with self.subTest(primary=primary, secondary=bool(secondary)):
+                    aligned = alignment(primary, [primary[:-1]] if primary else [], [(0, 5)] if primary else [], duration=10.)
+                    document = make_document(aligned, diar(), secondary, {}, {}, {})
+                    self.assertEqual(''.join(row['text'] for row in document['segments']), primary)
+                    self.assertEqual(document['comparison']['apple_text'], '比較文です。' if secondary else '')
+                    with tempfile.TemporaryDirectory() as folder:
+                        from scene_transcript import save
+                        save(document, Path(folder)/'result')
+                        self.assertEqual(document['comparison']['qwen_text'], primary)
+
     def test_internal_time_regression_falls_back_and_keeps_raw_evidence(self):
         a = alignment('一二三。', ['一', '二', '三'], [(0, 5), (20, 25), (10, 15)])
         result = build_aligned_turns(a, diar((0, 30, 'speaker')))

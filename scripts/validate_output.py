@@ -29,6 +29,7 @@ def require(condition, message):
 
 def file_matches(path, recorded):
     path = Path(path)
+    require(Path(recorded['path']).resolve() == path.resolve(), f'Recorded file path mismatch: {path}')
     require(path.stat().st_size == recorded['bytes'], f'File size mismatch: {path}')
     with path.open('rb') as stream:
         digest = hashlib.file_digest(stream, 'sha256').hexdigest()
@@ -116,6 +117,7 @@ def validate(run):
         raw_files = {'apple': 'apple/transcript-segments.json', 'diarization': 'diarization/pass-1.json',
                      'qwen': 'qwen-comparison.json', 'audio_manifest': 'audio-manifest.json',
                      'alignment': 'alignment.json'}
+        require(set(document['raw_sources']) == set(raw_files), 'Unexpected or missing raw-source references')
         for name, relative in raw_files.items():
             file_matches(run / relative, document['raw_sources'][name])
         report['checks'].append(check)
@@ -147,9 +149,6 @@ def validate(run):
         file_matches(plan_path, manifest['vad_chunk_plan'])
         policy = manifest['qwen_chunk_policy']
         file_matches(vad_path, policy['raw_vad'])
-        require(Path(policy['raw_vad']['path']).resolve() == vad_path.resolve()
-                and Path(manifest['vad_chunk_plan']['path']).resolve() == plan_path.resolve(),
-                'VAD evidence reference differs from run location')
         vad, plan = read_json(vad_path), read_json(plan_path)
         require(Path(vad['file']).resolve() == (run/'audio.wav').resolve()
                 and vad['sha256'] == manifest['clip']['sha256'], 'VAD refers to different audio')
@@ -213,9 +212,12 @@ def validate(run):
         children = alignment['raw_children']
         require(len(children) == len(parts), 'Child alignment count differs from ASR chunks')
         for index, child in enumerate(children):
+            require(child['start'] == parts[index]['start_sample']/rate
+                    and child['end'] == parts[index]['end_sample']/rate,
+                    'Child alignment extent differs from its ASR input chunk')
+            require(child['alignment']['mapping']['original_text'] == qwen['chunks'][index]['text'],
+                    'Child alignment text differs from its ASR chunk')
             path = run / 'alignments' / f'{index:03d}' / 'alignment.json'
-            require(Path(child['source']['path']).resolve() == path.resolve(),
-                    'Child alignment reference points outside its recorded run location')
             file_matches(path, child['source'])
             require(read_json(path) == child['alignment'], 'Child alignment differs from embedded evidence')
         expected = compose_alignments(children, source_start, window['duration'])
@@ -249,6 +251,19 @@ def validate(run):
                 require(all(type(i) is int and 0 <= i < count for i in row[name]),
                         f'Invalid {name} in row {row["id"]}')
         metadata, compact, differences = source_material(document)
+        report['checks'].append(check)
+
+        check = 'derived_transcript_from_raw_evidence'
+        from review_aligned_scene import make_document
+        expected_audio = dict(manifest['clip'], src='../audio.wav', source_offset=source_start)
+        rebuilt = make_document(alignment, diarization, read_json(run/'apple/transcript-segments.json'),
+                                provenance['input'], document['raw_sources'], expected_audio)
+        # make_document owns these fields. Only processing is replaced later by
+        # the pipeline's measured stages; compare every other derived field.
+        for key, expected in rebuilt.items():
+            if key != 'processing':
+                require(document.get(key) == expected, f'Derived transcript differs from raw evidence: {key}')
+        require(document['provenance'] == provenance, 'Exported provenance differs from retained provenance')
         report['checks'].append(check)
 
         check = 'compact_exports_and_readable_text'

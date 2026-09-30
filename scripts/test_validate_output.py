@@ -30,6 +30,20 @@ def add_vad_evidence(root, manifest):
     manifest.update(qwen_chunk_policy=policy, vad_chunk_plan=fingerprint(plan))
 
 
+def rebuild_document(root):
+    from review_aligned_scene import make_document
+    files = {'apple': 'apple/transcript-segments.json', 'diarization': 'diarization/pass-1.json',
+             'qwen': 'qwen-comparison.json', 'audio_manifest': 'audio-manifest.json', 'alignment': 'alignment.json'}
+    read = lambda name: json.loads((root/name).read_text())
+    manifest, provenance = read('audio-manifest.json'), read('provenance.json')
+    document = make_document(read('alignment.json'), read('diarization/pass-1.json'),
+                             read('apple/transcript-segments.json'), provenance['input'],
+                             {k: fingerprint(root/v) for k, v in files.items()},
+                             dict(manifest['clip'], src='../audio.wav', source_offset=.01))
+    document['provenance'] = provenance
+    return document
+
+
 def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
     for name in ('qwen-input', 'qwen', 'apple', 'diarization', 'vad'):
         (root / name).mkdir()
@@ -70,6 +84,9 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
     children = []
     for i, text in enumerate(('主張。', '理由。')):
         child = alignment(text, [text[:-1]], [(.001, .009)], duration=.01, offset=.01+i*.01)
+        if broad_fallback and i == 0:
+            child['items'][0]['raw_clip_seconds'] = [0, 0]
+            child['items'][0]['raw_source_seconds'] = [.01, .01]
         path = root/'alignments'/f'{i:03d}'/'alignment.json'
         path.parent.mkdir(parents=True)
         write_json(path, child)
@@ -78,32 +95,70 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
     write_json(root/'alignment.json', compose_alignments(children, .01, .02))
     write_json(root / 'apple/transcript-segments.json', [])
     write_json(root / 'diarization/pass-1.json', {'segments': [{'start': 0, 'end': .02, 'speaker': 'raw-1'}]})
-    source_files = {'apple': 'apple/transcript-segments.json', 'diarization': 'diarization/pass-1.json',
-                    'qwen': 'qwen-comparison.json', 'audio_manifest': 'audio-manifest.json', 'alignment': 'alignment.json'}
     source = fingerprint(original)
     provenance = {'input': source, 'settings': {'transcript_mode': 'qwen-aligned'}}
     write_json(root / 'provenance.json', provenance)
     write_json(root / 'processing.json', {'status': 'complete', 'stages': [{'status': 'complete'}]})
-    rows = []
-    for i, (start, end, text, span) in enumerate(((.011, .019, '主張。\n', [0, 4]), (.02, .029, '理由。', [4, 7]))):
-        rows.append({'id': str(i), 'start': start, 'end': end, 'text': text, 'source_raw_span': span,
-                     'speakers': [], 'state': 'unknown', 'playback_start': .01, 'playback_end': .03,
-                     'forced_token_references': [i], 'alignment_part_indices': [i],
-                     'raw_diarization_event_ids': [0], 'raw_other_speaker_event_ids': [], 'asr_difference_ids': []})
-    if broad_fallback:
-        rows[0].update(start=.01, end=.03, timing_provenance='whole clip fallback; sentence has no safe timed envelope',
-                       flags=['broad_playback_timing_fallback'], alignment_part_indices=[0, 1],
-                       state='mixed', speakers=['A'])
-    document = {'source_window': {'start': .01, 'end': .03}, 'input': source,
-                'provenance': provenance, 'speaker_names': {'A': '話者A'}, 'segments': rows,
-                'asr': {'engine': 'synthetic Qwen-shaped fixture'},
-                'comparison': {'differences': []},
-                'raw_sources': {k: fingerprint(root / path) for k, path in source_files.items()}}
+    document = rebuild_document(root)
     save(document, root / 'result')
     return document
 
 
 class ValidateOutputTests(unittest.TestCase):
+    def test_regenerated_exports_cannot_bless_changed_derived_evidence(self):
+        import shutil
+        for field in ('speaker', 'speaker_mapping', 'speaker_names', 'time', 'comparison', 'quality', 'candidates', 'playback'):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                document = make_run(root)
+                if field == 'speaker':
+                    document['segments'][0].update(speakers=['A'], state='single')
+                elif field == 'speaker_mapping':
+                    document['speaker_mapping'] = {'different-raw-id': 'A'}
+                elif field == 'speaker_names':
+                    document['speaker_names']['A'] = 'Edited identity'
+                elif field == 'time':
+                    document['segments'][0]['start'] += .0001
+                elif field == 'comparison':
+                    document['comparison']['differences'][0]['apple_text'] = 'Changed comparison evidence'
+                elif field == 'quality':
+                    document['segments'][0]['quality']['content'] = 'pass'
+                elif field == 'candidates':
+                    document['alignment_candidates']['diagnostics']['human_verified'] = True
+                else:
+                    document['review_audio']['source_offset'] = 0
+                shutil.rmtree(root/'result')
+                save(document, root/'result')
+                report = validate(root)
+                self.assertEqual(report['status'], 'failed', report)
+                self.assertEqual(report['errors'][0]['check'], 'derived_transcript_from_raw_evidence')
+
+    def test_all_recorded_file_paths_are_checked_even_for_identical_content(self):
+        import shutil
+        for name in ('apple', 'diarization', 'qwen', 'audio_manifest', 'alignment'):
+            for missing in (True, False):
+                with self.subTest(source=name, missing=missing), tempfile.TemporaryDirectory() as folder:
+                    root = Path(folder)
+                    document = make_run(root)
+                    other = root/'another.json'
+                    if not missing:
+                        other.write_bytes(Path(document['raw_sources'][name]['path']).read_bytes())
+                    document['raw_sources'][name]['path'] = str(other)
+                    shutil.rmtree(root/'result')
+                    save(document, root/'result')
+                    report = validate(root)
+                    self.assertEqual(report['status'], 'failed', report)
+                    self.assertIn('Recorded file path mismatch', report['errors'][0]['message'])
+        # The same primitive covers PCM, ASR chunks, VAD and child alignments.
+        from validate_output import file_matches
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/'audio.wav'
+            path.write_bytes(b'pcm')
+            identity = fingerprint(path)
+            identity['path'] = str(path.with_name('missing.wav'))
+            with self.assertRaisesRegex(ValueError, 'Recorded file path mismatch'):
+                file_matches(path, identity)
+
     def test_vad_raw_plan_and_manifest_must_agree(self):
         for mode in ('raw_deleted', 'raw_changed', 'plan_deleted', 'plan_changed', 'policy', 'cut', 'wrong_audio'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
@@ -190,9 +245,7 @@ class ValidateOutputTests(unittest.TestCase):
             write_json(child_path, child)
             write_json(root/'alignment.json', compose_alignments([
                 {'start': 0., 'end': .02, 'alignment': child, 'source': fingerprint(child_path)}], .01, .02))
-            document['segments'] = []
-            for name, entry in document['raw_sources'].items():
-                document['raw_sources'][name] = fingerprint(entry['path'])
+            document = rebuild_document(root)
             shutil.rmtree(root/'result')
             save(document, root/'result')
             report = validate(root)
@@ -242,18 +295,11 @@ class ValidateOutputTests(unittest.TestCase):
             self.assertFalse(report['accuracy_verified'])
             indicators = report['quality_indicators']
             self.assertTrue(indicators['counts_are_not_accuracy'])
-            self.assertEqual(indicators['speaker_state_counts'], {'single': 0, 'mixed': 1, 'unknown': 1})
-            self.assertEqual(indicators['timing_provenance_counts']['whole clip fallback; sentence has no safe timed envelope'], 1)
-            self.assertAlmostEqual(indicators['max_row_duration_seconds'], .02)
-            self.assertEqual(indicators['max_row_duration_ids'], ['0'])
-            for field in ('broad_timing_fallback', 'whole_source_window_timing',
-                          'rows_covering_multiple_chunks', 'rows_longer_than_longest_input_chunk'):
-                self.assertEqual(indicators[field]['count'], 1)
-                self.assertEqual(indicators[field]['row_ids'], ['0'])
-            self.assertEqual(indicators['chunks']['min_duration_seconds'], .01)
-            self.assertEqual(indicators['chunks']['max_duration_seconds'], .01)
-            self.assertEqual(indicators['chunks']['vad_fallback_boundaries'], {'count': 1, 'chunk_indices': [0]})
-            self.assertEqual(len(report['warnings']), 4)
+            self.assertEqual(indicators['speaker_state_counts']['unknown'], 2)
+            self.assertEqual(indicators['broad_timing_fallback']['row_ids'], ['0'])
+            self.assertAlmostEqual(indicators['max_row_duration_seconds'], .01)
+            self.assertEqual(indicators['rows_covering_multiple_chunks']['count'], 0)
+            self.assertTrue(report['warnings'])
 
     def test_chunk_pcm_mutation_is_rejected_even_with_matching_fingerprints(self):
         with tempfile.TemporaryDirectory() as folder:

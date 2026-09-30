@@ -10,9 +10,31 @@ __pycache__/
 
 .venv-asr/
 
-# Private/generated media never enter the public source repo.
-*.wav
-*.mp3
-*.m4a
+# Common private media: prevent accidental staging (not a security boundary).
+*.[wW][aA][vV]
+*.[wW][aA][vV][eE]
+*.[mM][pP]3
+*.[mM]4[aA]
+*.[aA][aA][cC]
+*.[aA][iI][fF]
+*.[aA][iI][fF][fF]
+*.[aA][iI][fF][cC]
+*.[cC][aA][fF]
+*.[fF][lL][aA][cC]
+*.[aA][lL][aA][cC]
+*.[mM][pP]4
+*.[mM]4[bB]
+*.[mM]4[pP]
+*.[mM][oO][vV]
+*.3[gG][pP]
+*.3[gG]2
+*.[aA][uU]
+*.[sS][nN][dD]
+*.[aA][cC]3
+*.[eE][aA][cC]3
+*.[aA][mM][rR]
+*.[oO][gG][gG]
+*.[oO][pP][uU][sS]
+*.[wW][mM][aA]
 *.gguf
 *.safetensors
