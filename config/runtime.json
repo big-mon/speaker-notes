@@ -1,0 +1,306 @@
+{
+  "schema_version": 1,
+  "tested_python": "3.14.7",
+  "minimum_python": "3.12",
+  "platform": "macOS 26+ / Apple silicon",
+  "swift_tools_version": "6.2",
+  "fluid_audio": {
+    "repo": "https://github.com/FluidInference/FluidAudio.git",
+    "revision": "20d4f0bd46d11d7f50a6eb4f7835cfdbd2b4ba14",
+    "license": "Apache-2.0",
+    "patch": "patches/fluid-no-tts-artifact.patch",
+    "patch_sha256": "f5b4d584a33da34589bf90400d0bd42f5cbde698a34100354313ee7d1c0ad4cf",
+    "patch_reason": "Remove unused TTS binary target; diarization source is unchanged."
+  },
+  "apple_speech": {
+    "model": "SpeechTranscriber ja-JP",
+    "source": "Apple AssetInventory system-managed download",
+    "license": "Apple platform terms",
+    "exact_model_revision": null,
+    "download_bytes": null,
+    "audio_uploaded": false
+  },
+  "python_packages": [
+    {
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "license": "MIT",
+      "source": "https://pypi.org/project/annotated-doc/0.0.5/",
+      "installed_file_bytes": 12552
+    },
+    {
+      "name": "anyio",
+      "version": "4.15.1",
+      "license": "MIT",
+      "source": "https://pypi.org/project/anyio/4.15.1/",
+      "installed_file_bytes": 1450101
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "license": "MPL-2.0",
+      "source": "https://pypi.org/project/certifi/2026.7.22/",
+      "installed_file_bytes": 255340
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1",
+      "license": "MIT-0",
+      "source": "https://pypi.org/project/cffi/2.1.1/",
+      "installed_file_bytes": 1057122
+    },
+    {
+      "name": "click",
+      "version": "8.5.0",
+      "license": "BSD-3-Clause",
+      "source": "https://pypi.org/project/click/8.5.0/",
+      "installed_file_bytes": 1037681
+    },
+    {
+      "name": "Cython",
+      "version": "3.3.0",
+      "license": "Apache-2.0",
+      "source": "https://pypi.org/project/Cython/3.3.0/",
+      "installed_file_bytes": 16762763
+    },
+    {
+      "name": "dyNET38",
+      "version": "2.2",
+      "license": "Apache 2.0",
+      "source": "https://pypi.org/project/dyNET38/2.2/",
+      "installed_file_bytes": 8422687
+    },
+    {
+      "name": "filelock",
+      "version": "4.0.5",
+      "license": "MIT",
+      "source": "https://pypi.org/project/filelock/4.0.5/",
+      "installed_file_bytes": 888494
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.9.0",
+      "license": "BSD-3-Clause",
+      "source": "https://pypi.org/project/fsspec/2026.9.0/",
+      "installed_file_bytes": 1880116
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "license": "MIT",
+      "source": "https://pypi.org/project/h11/0.16.0/",
+      "installed_file_bytes": 205346
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.6.0",
+      "license": "Apache-2.0",
+      "source": "https://pypi.org/project/hf-xet/1.6.0/",
+      "installed_file_bytes": 8152774
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "license": "BSD-3-Clause",
+      "source": "https://pypi.org/project/httpcore/1.0.9/",
+      "installed_file_bytes": 695082
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "license": "BSD-3-Clause",
+      "source": "https://pypi.org/project/httpx/0.28.1/",
+      "installed_file_bytes": 704741
+    },
+    {
+      "name": "huggingface_hub",
+      "version": "1.33.0",
+      "license": "Apache-2.0",
+      "source": "https://pypi.org/project/huggingface_hub/1.33.0/",
+      "installed_file_bytes": 7210566
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "license": "BSD-3-Clause",
+      "source": "https://pypi.org/project/idna/3.20/",
+      "installed_file_bytes": 527095
+    },
+    {
+      "name": "markdown-it-py",
+      "version": "4.2.0",
+      "license": "MIT License",
+      "source": "https://pypi.org/project/markdown-it-py/4.2.0/",
+      "installed_file_bytes": 552055
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2",
+      "license": "MIT License",
+      "source": "https://pypi.org/project/mdurl/0.1.2/",
+      "installed_file_bytes": 43504
+    },
+    {
+      "name": "miniaudio",
+      "version": "1.71",
+      "license": "MIT",
+      "source": "https://pypi.org/project/miniaudio/1.71/",
+      "installed_file_bytes": 1126532
+    },
+    {
+      "name": "mlx",
+      "version": "0.32.2",
+      "license": "MIT",
+      "source": "https://pypi.org/project/mlx/0.32.2/",
+      "installed_file_bytes": 2634942
+    },
+    {
+      "name": "mlx-audio",
+      "version": "0.5.7",
+      "license": "MIT",
+      "source": "https://pypi.org/project/mlx-audio/0.5.7/",
+      "installed_file_bytes": 19724994
+    },
+    {
+      "name": "mlx-metal",
+      "version": "0.32.2",
+      "license": "MIT",
+      "source": "https://pypi.org/project/mlx-metal/0.32.2/",
+      "installed_file_bytes": 209283119
+    },
+    {
+      "name": "nagisa",
+      "version": "0.3.0",
+      "license": "MIT License",
+      "source": "https://pypi.org/project/nagisa/0.3.0/",
+      "installed_file_bytes": 48830916
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.3",
+      "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+      "source": "https://pypi.org/project/numpy/2.5.3/",
+      "installed_file_bytes": 32942723
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "source": "https://pypi.org/project/packaging/26.3/",
+      "installed_file_bytes": 1073827
+    },
+    {
+      "name": "pycparser",
+      "version": "3.0",
+      "license": "BSD-3-Clause",
+      "source": "https://pypi.org/project/pycparser/3.0/",
+      "installed_file_bytes": 475961
+    },
+    {
+      "name": "Pygments",
+      "version": "2.21.0",
+      "license": "BSD-2-Clause",
+      "source": "https://pypi.org/project/Pygments/2.21.0/",
+      "installed_file_bytes": 9043634
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "license": "MIT",
+      "source": "https://pypi.org/project/PyYAML/6.0.3/",
+      "installed_file_bytes": 869275
+    },
+    {
+      "name": "regex",
+      "version": "2026.9.10",
+      "license": "Apache-2.0 AND CNRI-Python",
+      "source": "https://pypi.org/project/regex/2026.9.10/",
+      "installed_file_bytes": 1841270
+    },
+    {
+      "name": "rich",
+      "version": "15.0.0",
+      "license": "MIT",
+      "source": "https://pypi.org/project/rich/15.0.0/",
+      "installed_file_bytes": 2984541
+    },
+    {
+      "name": "safetensors",
+      "version": "0.8.0",
+      "license": "Apache Software License",
+      "source": "https://pypi.org/project/safetensors/0.8.0/",
+      "installed_file_bytes": 1287087
+    },
+    {
+      "name": "scipy",
+      "version": "1.18.1",
+      "license": "BSD License",
+      "source": "https://pypi.org/project/scipy/1.18.1/",
+      "installed_file_bytes": 98268016
+    },
+    {
+      "name": "shellingham",
+      "version": "1.5.4",
+      "license": "ISC License",
+      "source": "https://pypi.org/project/shellingham/1.5.4/",
+      "installed_file_bytes": 38938
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "license": "MIT",
+      "source": "https://pypi.org/project/six/1.17.0/",
+      "installed_file_bytes": 81157
+    },
+    {
+      "name": "sounddevice",
+      "version": "0.5.6",
+      "license": "MIT",
+      "source": "https://pypi.org/project/sounddevice/0.5.6/",
+      "installed_file_bytes": 2304055
+    },
+    {
+      "name": "tokenizers",
+      "version": "0.23.2",
+      "license": "Apache Software License",
+      "source": "https://pypi.org/project/tokenizers/0.23.2/",
+      "installed_file_bytes": 10057226
+    },
+    {
+      "name": "tqdm",
+      "version": "4.70.1",
+      "license": "MPL-2.0 AND MIT",
+      "source": "https://pypi.org/project/tqdm/4.70.1/",
+      "installed_file_bytes": 456205
+    },
+    {
+      "name": "transformers",
+      "version": "5.17.0",
+      "license": "Apache 2.0 License",
+      "source": "https://pypi.org/project/transformers/5.17.0/",
+      "installed_file_bytes": 109751156
+    },
+    {
+      "name": "typer",
+      "version": "0.27.2",
+      "license": "MIT",
+      "source": "https://pypi.org/project/typer/0.27.2/",
+      "installed_file_bytes": 1150331
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "license": "PSF-2.0",
+      "source": "https://pypi.org/project/typing_extensions/4.16.0/",
+      "installed_file_bytes": 362350
+    }
+  ],
+  "python_source_modifications": [],
+  "python_source_verification": "Installed Python source hashes matched package RECORD for mlx-audio, mlx, mlx-metal, transformers, nagisa, DyNet38, six, Cython and numpy on 2026-09-30. No local MLX patch required.",
+  "swift_products": [
+    "normalize",
+    "apple-transcribe",
+    "silero-vad-frames",
+    "fluid-diarize"
+  ]
+}
