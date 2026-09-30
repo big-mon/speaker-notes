@@ -148,6 +148,10 @@ def verify_manifest(path, base):
     """Verify prepared assets; never repair or download a missing model."""
     path, base = Path(path), Path(base).resolve()
     manifest = json.loads(path.read_text())
+    from setup_cli import verify_model_inventory, verify_cache_revision
+    verify_model_inventory(manifest, base)
+    if manifest.get('repo') == 'FluidInference/speaker-diarization-coreml':
+        verify_cache_revision(manifest, base)
     items = manifest['files']
     checked = []
     for item in items:
@@ -238,7 +242,7 @@ def run(args):
             models['alignment'] = verify_manifest(ROOT/'config/models/qwen-aligner-manifest.json', ROOT/'models/qwen-aligner')
             models['diarization'] = verify_manifest(ROOT/'config/models/fluid-model-manifest.json', ROOT/'models/fluid/speaker-diarization')
             code = ['scripts/scene_pipeline.py', 'scripts/scene_transcript.py',
-                    'scripts/text_anchor_audit.py', 'scripts/turn_candidates.py',
+                    'scripts/text_anchor_audit.py', 'scripts/turn_candidates.py', 'scripts/setup_cli.py',
                     'scripts/qwen_asr.py', 'scripts/asr_chunking.py',
                     'Sources/Normalize/main.swift', 'Sources/AppleTranscribe/main.swift',
                     'Sources/FluidDiarize/main.swift']
@@ -306,6 +310,7 @@ def run(args):
                         'clip': fingerprint(output/'audio.wav'), 'window': window,
                         **selection,
                         'qwen_chunks': parts, 'qwen_chunk_policy': chunk_policy,
+                        'vad_chunk_plan': fingerprint(output/'vad-chunk-plan.json'),
                         'contiguous_sample_coverage': True,
                         'low_energy_boundaries_are_verified_silence': False}
             write_json(output/'audio-manifest.json', manifest)

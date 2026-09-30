@@ -67,6 +67,22 @@ def verify_file(path, entry):
         raise ValueError(f'Model asset differs; preserved without replacement: {path}')
 
 
+def verify_model_inventory(manifest, directory):
+    """Loaders see a directory, so verification must cover its entire inventory."""
+    expected = {entry['path'] for entry in manifest['files']}
+    if len(expected) != len(manifest['files']):
+        raise ValueError('Duplicate model manifest path')
+    for name in expected:
+        within(directory, name)
+    if manifest.get('repo') == 'FluidInference/speaker-diarization-coreml':
+        expected.add('.fluidaudio-revision')
+    for path in directory.rglob('*'):
+        if path.is_symlink():
+            raise ValueError(f'Model directory contains a symlink: {path}')
+        if not path.is_dir() and str(path.relative_to(directory)) not in expected:
+            raise ValueError(f'Unmanifested model file: {path}')
+
+
 def verify_cache_revision(manifest, directory):
     if manifest['repo'] == 'FluidInference/speaker-diarization-coreml':
         marker = within(directory, '.fluidaudio-revision')
@@ -76,6 +92,7 @@ def verify_cache_revision(manifest, directory):
 
 def fetch_model(manifest, root=ROOT, opener=urllib.request.urlopen):
     directory = within(root, manifest['directory'])
+    verify_model_inventory(manifest, directory)
     for entry in manifest['files']:
         destination = within(directory, entry['path'])
         if destination.exists():
@@ -180,6 +197,7 @@ def verify(root=ROOT):
     for item in manifests(root):
         try:
             directory = within(root, item['directory'])
+            verify_model_inventory(item, directory)
             for entry in item['files']:
                 verify_file(within(directory, entry['path']), entry)
             verify_cache_revision(item, directory)

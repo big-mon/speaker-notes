@@ -17,8 +17,21 @@ def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False), encoding='utf-8')
 
 
+def add_vad_evidence(root, manifest):
+    vad = root/'vad/frames.json'
+    write_json(vad, {'file': str(root/'audio.wav'), 'sha256': manifest['clip']['sha256'],
+                    'sample_rate': 16000, 'sample_count': 320,
+                    'frames': [{'start_sample': 0, 'end_sample': 320, 'probability': .9}]})
+    policy = {'raw_vad': fingerprint(vad)}
+    plan = root/'vad-chunk-plan.json'
+    write_json(plan, {'policy': policy, 'parts': [
+        {k: v for k, v in p.items() if k not in ('file', 'source_start', 'source_end')}
+        for p in manifest['qwen_chunks']]})
+    manifest.update(qwen_chunk_policy=policy, vad_chunk_plan=fingerprint(plan))
+
+
 def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
-    for name in ('qwen-input', 'qwen', 'apple', 'diarization'):
+    for name in ('qwen-input', 'qwen', 'apple', 'diarization', 'vad'):
         (root / name).mkdir()
     original = root / 'original.bin'
     original.write_bytes(b'synthetic source input')
@@ -47,6 +60,7 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
                 'clip': fingerprint(root / 'audio.wav'),
                 'window': {'start_sample': 160, 'end_sample': 480, 'source_offset': .01, 'duration': .02},
                 'qwen_chunks': parts}
+    add_vad_evidence(root, manifest)
     write_json(root / 'audio-manifest.json', manifest)
     write_json(root / 'qwen-comparison.json', {'incomplete': False, 'chunks': chunks})
     combined = '主張。\n理由。'
@@ -90,6 +104,39 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
 
 
 class ValidateOutputTests(unittest.TestCase):
+    def test_vad_raw_plan_and_manifest_must_agree(self):
+        for mode in ('raw_deleted', 'raw_changed', 'plan_deleted', 'plan_changed', 'policy', 'cut', 'wrong_audio'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                document = make_run(root)
+                raw, plan_path = root/'vad/frames.json', root/'vad-chunk-plan.json'
+                if mode.endswith('deleted'):
+                    (raw if mode.startswith('raw') else plan_path).unlink()
+                elif mode.endswith('changed'):
+                    (raw if mode.startswith('raw') else plan_path).write_text('{}')
+                else:
+                    manifest = json.loads((root/'audio-manifest.json').read_text())
+                    plan = json.loads(plan_path.read_text())
+                    if mode == 'policy':
+                        plan['policy']['extra'] = 'contradiction'
+                    elif mode == 'cut':
+                        plan['parts'][0]['end_sample'] += 1
+                    else:
+                        vad = json.loads(raw.read_text())
+                        vad['sha256'] = '0'*64
+                        write_json(raw, vad)
+                        plan['policy']['raw_vad'] = fingerprint(raw)
+                        manifest['qwen_chunk_policy'] = plan['policy']
+                    write_json(plan_path, plan)
+                    manifest['vad_chunk_plan'] = fingerprint(plan_path)
+                    write_json(root/'audio-manifest.json', manifest)
+                    document['raw_sources']['audio_manifest'] = fingerprint(root/'audio-manifest.json')
+                    document['artifact_id'] = scene_artifact_id(document)
+                    write_json(root/'result/transcript.json', document)
+                report = validate(root)
+                self.assertEqual(report['status'], 'failed', report)
+                self.assertEqual(report['errors'][0]['check'], 'vad_evidence_and_chunk_plan')
+
     def test_child_alignment_evidence_cannot_be_missing_changed_or_contradictory(self):
         for mode in ('deleted', 'changed', 'metadata_conflict', 'missing_reference', 'missing_contract'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
@@ -129,6 +176,7 @@ class ValidateOutputTests(unittest.TestCase):
             audio.write_bytes((root/'audio.wav').read_bytes())
             part['file'] = fingerprint(audio)
             manifest['qwen_chunks'] = [part]
+            add_vad_evidence(root, manifest)
             write_json(root/'audio-manifest.json', manifest)
             raw = root/'qwen/000.json'
             write_json(raw, {'file': str(audio), 'raw': {'text': ''}})

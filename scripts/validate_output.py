@@ -142,6 +142,29 @@ def validate(run):
         del normalized
         report['checks'].append(check)
 
+        check = 'vad_evidence_and_chunk_plan'
+        plan_path, vad_path = run/'vad-chunk-plan.json', run/'vad/frames.json'
+        file_matches(plan_path, manifest['vad_chunk_plan'])
+        policy = manifest['qwen_chunk_policy']
+        file_matches(vad_path, policy['raw_vad'])
+        require(Path(policy['raw_vad']['path']).resolve() == vad_path.resolve()
+                and Path(manifest['vad_chunk_plan']['path']).resolve() == plan_path.resolve(),
+                'VAD evidence reference differs from run location')
+        vad, plan = read_json(vad_path), read_json(plan_path)
+        require(Path(vad['file']).resolve() == (run/'audio.wav').resolve()
+                and vad['sha256'] == manifest['clip']['sha256'], 'VAD refers to different audio')
+        require(vad['sample_rate'] == rate and vad['sample_count'] == len(pcm)//4,
+                'VAD sample extent differs from selected audio')
+        from vad_chunking import _pause_candidates
+        _pause_candidates(vad, len(pcm)//4, rate)
+        require(plan['policy'] == policy, 'VAD plan policy differs from manifest')
+        # Only these fields are added after the plan is saved; all cut decisions
+        # must match, not merely the start/end sample positions.
+        planned = [{k: v for k, v in part.items() if k not in ('file', 'source_start', 'source_end')}
+                   for part in manifest['qwen_chunks']]
+        require(plan['parts'] == planned, 'VAD plan cuts differ from actual chunks')
+        report['checks'].append(check)
+
         check = 'qwen_chunk_coverage_and_raw_text'
         qwen = read_json(run / 'qwen-comparison.json')
         parts = manifest['qwen_chunks']

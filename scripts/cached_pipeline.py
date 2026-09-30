@@ -86,7 +86,7 @@ def prepared_settings():
     binaries = ['.build/release/normalize', '.build/release/apple-transcribe',
                 '.build/release/silero-vad-frames', '.venv-asr/bin/python',
                 '.build/release/fluid-diarize']
-    scripts = ['cached_pipeline.py', 'scene_pipeline.py', 'scene_transcript.py',
+    scripts = ['cached_pipeline.py', 'scene_pipeline.py', 'scene_transcript.py', 'setup_cli.py',
                'text_anchor_audit.py', 'turn_candidates.py', 'qwen_asr.py',
                'asr_chunking.py', 'vad_chunking.py', 'align_qwen.py',
                'compose_alignment.py', 'aligned_speaker_turns.py', 'review_aligned_scene.py', 'validate_output.py']

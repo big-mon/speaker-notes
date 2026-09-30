@@ -41,6 +41,42 @@ class ScenePipelineTests(unittest.TestCase):
                     self.fail('Must not start normalizer')
             self.assertEqual(list(Path(directory).glob('.normalization-*')), [])
 
+    def test_loader_inventory_rejects_extra_files_symlinks_and_bad_fluid_marker(self):
+        from setup_cli import fetch_model
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            base = root/'model'
+            base.mkdir()
+            asset = base/'weights.bin'
+            asset.write_bytes(b'weights')
+            manifest = {'repo': 'example/model', 'directory': 'model', 'revision': 'a'*40,
+                        'files': [{**fingerprint(asset), 'path': 'weights.bin'}]}
+            path = root/'manifest.json'
+            path.write_text(json.dumps(manifest))
+            verify_manifest(path, base)
+            for name in ('tokenizer.json', 'special_tokens_map.json', 'nested/extra.json'):
+                extra = base/name
+                extra.parent.mkdir(exist_ok=True)
+                extra.write_text('{}')
+                with self.assertRaisesRegex(ValueError, 'Unmanifested'):
+                    verify_manifest(path, base)
+                with self.assertRaisesRegex(ValueError, 'Unmanifested'):
+                    fetch_model(manifest, root)
+                extra.unlink()
+            alias = base/'linked'
+            alias.symlink_to(root, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'symlink'):
+                verify_manifest(path, base)
+            alias.unlink()
+            manifest['repo'] = 'FluidInference/speaker-diarization-coreml'
+            path.write_text(json.dumps(manifest))
+            marker = base/'.fluidaudio-revision'
+            marker.write_text('a'*40)
+            verify_manifest(path, base)
+            marker.write_text('b'*40)
+            with self.assertRaisesRegex(ValueError, 'revision differs'):
+                verify_manifest(path, base)
+
     def test_public_entry_defaults_to_full_and_preview_is_explicit(self):
         import scene_pipeline
         with mock.patch.object(scene_pipeline, 'run') as run, mock.patch.object(scene_pipeline.signal, 'signal'):
@@ -165,20 +201,22 @@ class ScenePipelineTests(unittest.TestCase):
     def test_prepared_model_provenance_is_verified_not_downloaded(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            asset = root/'weights.bin'
+            base = root/'model'
+            base.mkdir()
+            asset = base/'weights.bin'
             asset.write_bytes(b'tiny fixture')
             entry = {'path': asset.name, 'bytes': 12,
                      'sha256': hashlib.sha256(asset.read_bytes()).hexdigest()}
             manifest = root/'manifest.json'
             manifest.write_text(json.dumps({'files': [entry]}))
-            result = verify_manifest(manifest, root)
+            result = verify_manifest(manifest, base)
             self.assertEqual(result['verified_assets'][0], fingerprint(asset))
             asset.write_bytes(b'changed data')
             with self.assertRaisesRegex(ValueError, 'does not match'):
-                verify_manifest(manifest, root)
+                verify_manifest(manifest, base)
             manifest.write_text(json.dumps({'files': [dict(entry, path='../outside')]}))
-            with self.assertRaisesRegex(ValueError, 'escapes'):
-                verify_manifest(manifest, root)
+            with self.assertRaisesRegex(ValueError, 'relative path|escapes'):
+                verify_manifest(manifest, base)
 
     @unittest.skipUnless(hasattr(os, 'killpg'), 'POSIX cancellation test')
     def test_cancel_stops_real_child_and_keeps_log(self):

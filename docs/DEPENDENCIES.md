@@ -19,6 +19,8 @@ Apple の日本語モデル取得は `--prepare-apple` を明示した場合の�
 .build/release/apple-transcribe --prepare-model
 ```
 
+モデルディレクトリにはmanifestで列挙したファイルだけを置きます。追加のtokenizer設定なども推論に影響し得るため、準備・通常実行・キャッシュで未記録ファイルとシンボリックリンクを拒否します。例外は固定revisionと内容を照合するFluidAudioの `.fluidaudio-revision` だけです。
+
 `--verify` はモデルファイル全体の SHA-256、Python パッケージ版、FluidAudio の commit・パッチ・未追跡ファイルの不在、CLI の存在、Apple 日本語モデルの準備状態を確認します。推論やモデル取得は行いません。実行物の存在確認は実際の音声処理の成功を保証しないため、準備後は README の短区間実行で確認します。macOS の Speech/Metal 機能がサンドボックス内で利用できない場合は、通常のターミナルか環境の承認手順を通した実行で確認してください。
 
 ## モデル

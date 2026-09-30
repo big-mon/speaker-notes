@@ -130,6 +130,11 @@ class CachedPipelineTests(unittest.TestCase):
                 self.assertIn('config/runtime.json', initial['code'])
                 runtime.write_text('{"changed": true}')
                 self.assertNotEqual(key, app.make_cache_key(source, app.prepared_settings())[0])
+                extra = root/'models/qwen17/tokenizer.json'
+                extra.write_text('{}')
+                with self.assertRaisesRegex(ValueError, 'Unmanifested'):
+                    app.prepared_settings()
+                extra.unlink()
                 (root/'models/qwen17/weights.bin').write_bytes(b'replaced fixture weights')
                 with self.assertRaisesRegex(ValueError, 'does not match recorded manifest'):
                     app.prepared_settings()
