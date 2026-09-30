@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from apply_scene_review import apply_review
-from scene_transcript import scene_artifact_id
+from scene_transcript import scene_artifact_id, save
 
 
 def source():
@@ -196,6 +196,18 @@ class ApplyReviewTests(unittest.TestCase):
         result, ready = apply_review(document, review)
         self.assertTrue(ready['segments'][0]['ready_for_anonymous_summary'])
         self.assertFalse(ready['segments'][0]['ready_for_attributed_summary'])
+        self.assertEqual(ready['segments'][0]['state'], 'mixed')
+        self.assertEqual(result['segments'][0]['speakers'], ['A', 'B'])
+        self.assertEqual(result['segments'][0]['model_segment']['speakers'], ['A'])
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder)/'export'
+            save(result, output)
+            exported = json.loads((output/'segments.jsonl').read_text().splitlines()[0])
+            self.assertEqual(exported['state'], 'mixed')
+            self.assertEqual(exported['speakers'], ['A', 'B'])
+            self.assertFalse(exported['ready_for_attributed_summary'])
+            self.assertEqual(exported['text'], document['segments'][0]['text'])
+            self.assertIn('話者A / 話者B', (output/'transcript.md').read_text())
 
     def test_cli_uses_new_directory_and_never_writes_source_files(self):
         with tempfile.TemporaryDirectory() as folder:

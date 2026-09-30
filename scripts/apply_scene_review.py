@@ -149,8 +149,8 @@ def apply_review(document, review):
         row['ready_for_attributed_summary'] = content_ready and statuses['speaker'] == 'pass' and len(row['speakers']) == 1
         if statuses['speaker'] == 'pass':
             mixed = (row.get('overlap_event_ids') or row.get('raw_overlap_intervals')
-                     or original.get('state') == 'mixed')
-            row['state'] = ('mixed' if mixed else 'single') if len(row['speakers']) == 1 else 'overlap'
+                     or original.get('state') == 'mixed' or len(row['speakers']) > 1)
+            row['state'] = 'mixed' if mixed else 'single'
             row['attribution_status'] = 'human_reviewed' if len(row['speakers']) == 1 else 'human_reviewed_multiple_speakers_not_individual_word_ownership'
         elif statuses['speaker'] == 'not_applicable':
             row['candidate_speakers'] = row['speakers']
