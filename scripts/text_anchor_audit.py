@@ -44,7 +44,7 @@ def _raw_span(offsets, start, end, text_length):
 
 def _valid_time(unit):
     start, end = unit.get("start"), unit.get("end")
-    return all(isinstance(value, (int, float)) and math.isfinite(value)
+    return all(type(value) in (int, float) and math.isfinite(value)
                for value in (start, end)) and 0 <= start < end
 
 
@@ -169,7 +169,10 @@ def audit(apple_segments, qwen_text, *, clip_start=None, clip_end=None,
                     "qwen_correctness_verified": False,
                     "requires_audio_review": True,
                 }
+            time_range, references, timing = _unit_envelope(units, apple_span)
             differences.append(dict(row, operation=operation, review_signals=signals,
+                                    apple_time_range=time_range, apple_unit_references=references,
+                                    timing_status=timing,
                                     review_signal_evidence=signal_evidence,
                                     apple_normalized_span=[a0, a1], qwen_normalized_span=[q0, q1],
                                     qwen_time_range=None))

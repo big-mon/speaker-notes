@@ -184,6 +184,21 @@ def validate(run):
 
         check = 'alignment_and_segment_text_preservation'
         alignment = read_json(run / 'alignment.json')
+        require(alignment.get('kind') == 'derived_composite_of_independent_forced_alignments',
+                'Expected production composite alignment with child evidence')
+        from compose_alignment import compose_alignments
+        children = alignment['raw_children']
+        require(len(children) == len(parts), 'Child alignment count differs from ASR chunks')
+        for index, child in enumerate(children):
+            path = run / 'alignments' / f'{index:03d}' / 'alignment.json'
+            require(Path(child['source']['path']).resolve() == path.resolve(),
+                    'Child alignment reference points outside its recorded run location')
+            file_matches(path, child['source'])
+            require(read_json(path) == child['alignment'], 'Child alignment differs from embedded evidence')
+        expected = compose_alignments(children, source_start, window['duration'])
+        require(all(alignment[key] == expected[key] for key in
+                    ('mapping', 'items', 'composition_parts', 'composition_rules')),
+                'Composed alignment differs from its child evidence')
         require(alignment['mapping']['original_text'] == text, 'Alignment changed the Qwen text')
         require(alignment['source_offset_seconds'] == source_start and
                 alignment['duration_seconds'] == window['duration'], 'Alignment audio extent differs')

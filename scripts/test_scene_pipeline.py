@@ -21,6 +21,26 @@ def pcm(values):
 
 
 class ScenePipelineTests(unittest.TestCase):
+    def test_snapshot_binds_normalizer_to_verified_bytes_despite_restored_source(self):
+        from scene_pipeline import verified_input_snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)/'input.mp3'
+            source.write_bytes(b'keyed audio')
+            identity = fingerprint(source)
+            with verified_input_snapshot(source, identity, directory) as snapshot:
+                source.write_bytes(b'transient different audio')
+                consumed = snapshot.read_bytes()
+                source.write_bytes(b'keyed audio')
+                self.assertEqual(consumed, b'keyed audio')
+                self.assertEqual(fingerprint(source), identity)
+                self.assertEqual(snapshot.stat().st_mode & 0o222, 0)
+            self.assertFalse(snapshot.exists())
+            source.write_bytes(b'different at copy time')
+            with self.assertRaisesRegex(ValueError, 'snapshot differs'):
+                with verified_input_snapshot(source, identity, directory):
+                    self.fail('Must not start normalizer')
+            self.assertEqual(list(Path(directory).glob('.normalization-*')), [])
+
     def test_public_entry_defaults_to_full_and_preview_is_explicit(self):
         import scene_pipeline
         with mock.patch.object(scene_pipeline, 'run') as run, mock.patch.object(scene_pipeline.signal, 'signal'):

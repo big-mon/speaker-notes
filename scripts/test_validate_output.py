@@ -51,9 +51,17 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
     write_json(root / 'qwen-comparison.json', {'incomplete': False, 'chunks': chunks})
     combined = '主張。\n理由。'
     (root / 'qwen-comparison.txt').write_text(combined + '\n')
-    write_json(root / 'alignment.json', {'mapping': {'original_text': combined},
-                                        'source_offset_seconds': .01, 'duration_seconds': .02,
-                                        'items': [{}, {}], 'composition_parts': [{}, {}]})
+    from compose_alignment import compose_alignments
+    from test_aligned_speaker_turns import alignment
+    children = []
+    for i, text in enumerate(('主張。', '理由。')):
+        child = alignment(text, [text[:-1]], [(.001, .009)], duration=.01, offset=.01+i*.01)
+        path = root/'alignments'/f'{i:03d}'/'alignment.json'
+        path.parent.mkdir(parents=True)
+        write_json(path, child)
+        children.append({'start': i*.01, 'end': (i+1)*.01,
+                         'alignment': child, 'source': fingerprint(path)})
+    write_json(root/'alignment.json', compose_alignments(children, .01, .02))
     write_json(root / 'apple/transcript-segments.json', [])
     write_json(root / 'diarization/pass-1.json', {'segments': [{'start': 0, 'end': .02, 'speaker': 'raw-1'}]})
     source_files = {'apple': 'apple/transcript-segments.json', 'diarization': 'diarization/pass-1.json',
@@ -82,6 +90,33 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
 
 
 class ValidateOutputTests(unittest.TestCase):
+    def test_child_alignment_evidence_cannot_be_missing_changed_or_contradictory(self):
+        for mode in ('deleted', 'changed', 'metadata_conflict', 'missing_reference', 'missing_contract'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                document = make_run(root)
+                child = root/'alignments/001/alignment.json'
+                if mode == 'deleted':
+                    child.unlink()
+                elif mode == 'changed':
+                    child.write_text('{}')
+                else:
+                    # Updating outer hashes cannot bless a contradictory child reference.
+                    composed = json.loads((root/'alignment.json').read_text())
+                    if mode == 'metadata_conflict':
+                        composed['composition_parts'][1]['source']['sha256'] = 'a'*64
+                    elif mode == 'missing_reference':
+                        composed['raw_children'][1]['source']['path'] = str(root/'missing.json')
+                    else:
+                        composed.pop('kind')
+                    write_json(root/'alignment.json', composed)
+                    document['raw_sources']['alignment'] = fingerprint(root/'alignment.json')
+                    document['artifact_id'] = scene_artifact_id(document)
+                    write_json(root/'result/transcript.json', document)
+                report = validate(root)
+                self.assertEqual(report['status'], 'failed', report)
+                self.assertEqual(report['errors'][0]['check'], 'alignment_and_segment_text_preservation')
+
     def test_entire_textless_run_keeps_audio_coverage_and_empty_exports(self):
         import shutil
         with tempfile.TemporaryDirectory() as folder:
@@ -100,9 +135,13 @@ class ValidateOutputTests(unittest.TestCase):
             write_json(root/'qwen-comparison.json', {'incomplete': False, 'chunks': [dict(
                 part, text='', raw_output=fingerprint(raw), token_limit_reached=False)]})
             (root/'qwen-comparison.txt').write_text('\n')
-            write_json(root/'alignment.json', {'mapping': {'original_text': ''},
-                       'source_offset_seconds': .01, 'duration_seconds': .02,
-                       'items': [], 'composition_parts': [{}]})
+            from compose_alignment import compose_alignments
+            from test_aligned_speaker_turns import alignment
+            child = alignment('', [], [], duration=.02, offset=.01)
+            child_path = root/'alignments/000/alignment.json'
+            write_json(child_path, child)
+            write_json(root/'alignment.json', compose_alignments([
+                {'start': 0., 'end': .02, 'alignment': child, 'source': fingerprint(child_path)}], .01, .02))
             document['segments'] = []
             for name, entry in document['raw_sources'].items():
                 document['raw_sources'][name] = fingerprint(entry['path'])

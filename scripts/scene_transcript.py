@@ -18,7 +18,7 @@ def stamp(seconds):
 def scene_artifact_id(document):
     """Identify the immutable review subject, excluding mutable run timing."""
     keys = ('input', 'source_window', 'segments', 'speaker_mapping', 'speaker_names',
-            'raw_sources', 'rules', 'review_audio')
+            'raw_sources', 'rules', 'review_audio', 'comparison')
     subject = {key: document.get(key) for key in keys}
     data = json.dumps(subject, ensure_ascii=False, sort_keys=True,
                       separators=(',', ':'), allow_nan=False).encode()

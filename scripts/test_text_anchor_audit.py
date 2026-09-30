@@ -19,6 +19,23 @@ def compact_timed(text):
 
 
 class TextAnchorAuditTests(unittest.TestCase):
+    def test_differences_keep_only_native_apple_times_and_unit_references(self):
+        for apple, qwen in [('甲乙丙', '甲丁丙'), ('甲乙丙', '甲丙'), ('甲丙', '甲乙丙')]:
+            with self.subTest(apple=apple, qwen=qwen):
+                difference = audit(timed(apple, 10), qwen)['differences'][0]
+                self.assertIsNone(difference['qwen_time_range'])
+                if difference['operation'] == 'insert':
+                    self.assertIsNone(difference['apple_time_range'])
+                    self.assertEqual(difference['apple_unit_references'], [])
+                else:
+                    self.assertEqual(difference['apple_time_range'], [11, 12])
+                    self.assertEqual(difference['apple_unit_references'], [[0, 1]])
+        for units in [[{'text': '甲', 'start': 2, 'end': 3}, {'text': '乙', 'start': 0, 'end': 1}],
+                      [{'text': '甲', 'start': None, 'end': None}]]:
+            result = audit([{'units': units}], '')['differences'][0]
+            self.assertIsNone(result['apple_time_range'])
+            self.assertTrue(result['apple_unit_references'])
+
     def test_punctuation_offsets_and_native_envelopes(self):
         result = audit(timed("皆さん、こんにちは。"), "皆さん こんにちは！")
         self.assertEqual(result["differences"], [])
@@ -40,7 +57,7 @@ class TextAnchorAuditTests(unittest.TestCase):
         self.assertEqual(len(result["anchors"]), 1)
         self.assertEqual(result["differences"], [])
 
-    def test_insertions_deletions_do_not_receive_times(self):
+    def test_qwen_insertions_deletions_do_not_receive_inferred_times(self):
         result = audit(timed("会社の目的は街を守ることです。"), "まず会社の目的は守ることです。以上。")
         self.assertEqual({d["operation"] for d in result["differences"]}, {"insert", "delete"})
         self.assertTrue(all(d["qwen_time_range"] is None for d in result["differences"]))

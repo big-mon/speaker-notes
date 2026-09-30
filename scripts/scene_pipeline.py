@@ -18,6 +18,8 @@ import os
 from pathlib import Path
 import platform
 import signal
+import shutil
+import tempfile
 import struct
 import subprocess
 import sys
@@ -27,6 +29,19 @@ import traceback
 ROOT = Path(__file__).resolve().parents[1]
 RATE = 16000
 MAX_CONTEXT_SECONDS = 15.
+
+
+@contextmanager
+def verified_input_snapshot(source, expected, directory):
+    """Normalize a private copy, not a source path that can change mid-read."""
+    with tempfile.TemporaryDirectory(prefix='.normalization-', dir=directory) as temporary:
+        snapshot = Path(temporary) / ('input' + source.suffix)
+        shutil.copyfile(source, snapshot)
+        actual = fingerprint(snapshot)
+        if any(actual[key] != expected[key] for key in ('bytes', 'sha256')):
+            raise ValueError('Input changed before normalization; snapshot differs from input identity')
+        snapshot.chmod(0o400)
+        yield snapshot
 
 
 def fingerprint(path):
@@ -245,9 +260,11 @@ def run(args):
                                        'qwen_chunk_policy': 'vad'}}
             write_json(output/'provenance.json', provenance)
         with stage('normalization') as row:
-            command = [binaries['normalize'], args.input.resolve(), output/'normalized.wav']
-            row['command'] = [str(x) for x in command]
-            run_command(command, output/'logs/normalization.log')
+            with verified_input_snapshot(args.input, provenance['input'], output) as snapshot:
+                command = [binaries['normalize'], snapshot, output/'normalized.wav']
+                row['command'] = [str(x) for x in command]
+                row['input_policy'] = 'private read-only copy verified against input SHA256; removed after normalization'
+                run_command(command, output/'logs/normalization.log')
         with stage('clip'):
             rate, full_pcm = read_float_wav(output/'normalized.wav')
             if rate != RATE:
