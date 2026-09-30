@@ -40,7 +40,10 @@ def rebuild_document(root):
                              read('apple/transcript-segments.json'), provenance['input'],
                              {k: fingerprint(root/v) for k, v in files.items()},
                              dict(manifest['clip'], src='../audio.wav', source_offset=.01))
-    document['provenance'] = provenance
+    document.update(provenance=provenance, processing=read('processing.json'),
+                    qwen_chunks=read('qwen-comparison.json'), qwen_settings=read('qwen/settings.json'),
+                    diarization_metadata={k: v for k, v in read('diarization/pass-1.json').items() if k != 'segments'},
+                    **{k: manifest[k] for k in ('requested_window', 'actual_window', 'context_conditions')})
     return document
 
 
@@ -74,6 +77,9 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
                 'clip': fingerprint(root / 'audio.wav'),
                 'window': {'start_sample': 160, 'end_sample': 480, 'source_offset': .01, 'duration': .02},
                 'qwen_chunks': parts}
+    manifest.update(requested_window={'start': .01, 'end': .03},
+                    actual_window={'start': .01, 'end': .03}, context_conditions={})
+    write_json(root/'qwen/settings.json', {'fixture': True})
     add_vad_evidence(root, manifest)
     write_json(root / 'audio-manifest.json', manifest)
     write_json(root / 'qwen-comparison.json', {'incomplete': False, 'chunks': chunks})
@@ -107,7 +113,7 @@ def make_run(root, gap=False, altered_chunk=False, broad_fallback=False):
 class ValidateOutputTests(unittest.TestCase):
     def test_regenerated_exports_cannot_bless_changed_derived_evidence(self):
         import shutil
-        for field in ('speaker', 'speaker_mapping', 'speaker_names', 'time', 'comparison', 'quality', 'candidates', 'playback'):
+        for field in ('speaker', 'speaker_mapping', 'speaker_names', 'time', 'comparison', 'quality', 'candidates', 'playback', 'processing', 'qwen_settings', 'qwen_chunks', 'actual_window'):
             with self.subTest(field=field), tempfile.TemporaryDirectory() as folder:
                 root = Path(folder)
                 document = make_run(root)
@@ -125,8 +131,10 @@ class ValidateOutputTests(unittest.TestCase):
                     document['segments'][0]['quality']['content'] = 'pass'
                 elif field == 'candidates':
                     document['alignment_candidates']['diagnostics']['human_verified'] = True
-                else:
+                elif field == 'playback':
                     document['review_audio']['source_offset'] = 0
+                else:
+                    document[field] = {'stale': True}
                 shutil.rmtree(root/'result')
                 save(document, root/'result')
                 report = validate(root)

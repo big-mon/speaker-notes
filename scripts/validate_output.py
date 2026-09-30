@@ -263,7 +263,13 @@ def validate(run):
         for key, expected in rebuilt.items():
             if key != 'processing':
                 require(document.get(key) == expected, f'Derived transcript differs from raw evidence: {key}')
-        require(document['provenance'] == provenance, 'Exported provenance differs from retained provenance')
+        retained = {'provenance': provenance, 'processing': processing, 'qwen_chunks': qwen,
+                    'qwen_settings': read_json(run/'qwen/settings.json'),
+                    'diarization_metadata': {k: v for k, v in diarization.items() if k != 'segments'}}
+        retained.update({key: manifest[key] for key in
+                         ('requested_window', 'actual_window', 'context_conditions')})
+        for key, expected in retained.items():
+            require(document.get(key) == expected, f'Exported metadata differs from retained evidence: {key}')
         report['checks'].append(check)
 
         check = 'compact_exports_and_readable_text'

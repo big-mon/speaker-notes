@@ -24,7 +24,7 @@ def complete_scene(command, log):
     document = make_run(scene)
     document['input'] = app.fingerprint(command[2])
     document['provenance']['input'] = document['input']
-    document['processing'] = {'status': 'complete'}
+    document['processing'] = json.loads((scene/'processing.json').read_text())
     app.write_json(scene/'provenance.json', document['provenance'])
     shutil.rmtree(scene/'result')
     save(document, scene/'result')
